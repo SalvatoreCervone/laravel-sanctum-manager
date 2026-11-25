@@ -47,4 +47,11 @@ interface TokenManagerContract
         ?int $gracePeriodMinutes = null,
         ?string $newName = null,
     ): RotatedTokenResult;
+
+    /**
+     * Prune expired, revoked, and past-grace tokens as well as stale audit logs.
+     *
+     * @return array{tokens: int, logs: int}
+     */
+    public function prune(int $days = 30, int $logDays = 90): array;
 }

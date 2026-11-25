@@ -7,6 +7,8 @@ namespace SanctumManager;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -20,10 +22,15 @@ use SanctumManager\Console\Commands\RotateTokenCommand;
 use SanctumManager\Contracts\ScopeRegistryContract;
 use SanctumManager\Contracts\TokenManagerContract;
 use SanctumManager\Contracts\TokenUsageLoggerContract;
+use SanctumManager\Events\TokenIssued;
+use SanctumManager\Events\TokenRevoked;
+use SanctumManager\Events\TokenRotated;
+use SanctumManager\Http\Middleware\AuthorizeDashboard;
 use SanctumManager\Http\Middleware\CheckControllerScopeAttributes;
 use SanctumManager\Http\Middleware\CheckForAnyScope;
 use SanctumManager\Http\Middleware\CheckScopes;
 use SanctumManager\Http\Middleware\EnforceTokenConstraints;
+use SanctumManager\Listeners\SendTokenLifecycleMail;
 use SanctumManager\Models\PersonalAccessToken;
 use SanctumManager\Scopes\ScopeMatcher;
 use SanctumManager\Scopes\ScopeRegistry;
@@ -74,10 +81,15 @@ class SanctumManagerServiceProvider extends ServiceProvider
     {
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
 
+        $this->loadViewsFrom(__DIR__.'/../resources/views', 'sanctum-manager');
+
         $this->registerPublishables();
         $this->registerMiddleware();
+        $this->registerDashboardGate();
         $this->registerRateLimiter();
         $this->registerRoutes();
+        $this->registerDashboardRoutes();
+        $this->registerMailListeners();
         $this->registerCommands();
     }
 
@@ -104,6 +116,10 @@ class SanctumManagerServiceProvider extends ServiceProvider
             __DIR__.'/../database/migrations/add_manager_columns_to_personal_access_tokens_table.php.stub' => database_path("migrations/{$timestamp1}_add_manager_columns_to_personal_access_tokens_table.php"),
             __DIR__.'/../database/migrations/create_sanctum_token_logs_table.php.stub' => database_path("migrations/{$timestamp2}_create_sanctum_token_logs_table.php"),
         ], 'sanctum-manager-migrations');
+
+        $this->publishes([
+            __DIR__.'/../resources/views' => resource_path('views/vendor/sanctum-manager'),
+        ], 'sanctum-manager-views');
     }
 
     /**
@@ -118,6 +134,43 @@ class SanctumManagerServiceProvider extends ServiceProvider
         $router->aliasMiddleware('sanctum.scopes', CheckScopes::class);
         $router->aliasMiddleware('sanctum.scope.any', CheckForAnyScope::class);
         $router->aliasMiddleware('sanctum.attributes', CheckControllerScopeAttributes::class);
+        $router->aliasMiddleware('sanctum.dashboard', AuthorizeDashboard::class);
+    }
+
+    /**
+     * Register the default authorization gate for the web dashboard.
+     *
+     * Host applications may override this gate in their AppServiceProvider.
+     */
+    protected function registerDashboardGate(): void
+    {
+        $gateName = (string) config('sanctum-manager.dashboard.gate', 'viewSanctumManager');
+
+        if (Gate::has($gateName)) {
+            return;
+        }
+
+        Gate::define($gateName, function (mixed $user = null): bool {
+            if ((bool) config('sanctum-manager.dashboard.allow_in_local', true) && $this->app->environment('local')) {
+                return true;
+            }
+
+            if ($user === null) {
+                return false;
+            }
+
+            $allowedEmails = AuthorizeDashboard::resolveAllowedEmails();
+
+            if ($allowedEmails === []) {
+                return false;
+            }
+
+            $email = is_object($user) && isset($user->email) && is_string($user->email)
+                ? strtolower(trim($user->email))
+                : null;
+
+            return $email !== null && in_array($email, $allowedEmails, true);
+        });
     }
 
     /**
@@ -166,6 +219,44 @@ class SanctumManagerServiceProvider extends ServiceProvider
         ], function (): void {
             $this->loadRoutesFrom(__DIR__.'/../routes/api.php');
         });
+    }
+
+    /**
+     * Conditionally register the optional graphical web dashboard routes.
+     */
+    protected function registerDashboardRoutes(): void
+    {
+        if (! (bool) config('sanctum-manager.dashboard.enabled', true)) {
+            return;
+        }
+
+        $prefix = (string) config('sanctum-manager.dashboard.prefix', 'sanctum-manager');
+        $domain = config('sanctum-manager.dashboard.domain');
+        $middleware = config('sanctum-manager.dashboard.middleware', ['web', 'sanctum.dashboard']);
+
+        $attributes = [
+            'prefix' => $prefix,
+            'middleware' => is_array($middleware) ? $middleware : ['web', 'sanctum.dashboard'],
+        ];
+
+        if (is_string($domain) && $domain !== '') {
+            $attributes['domain'] = $domain;
+        }
+
+        Route::group($attributes, function (): void {
+            $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
+        });
+    }
+
+    /**
+     * Register event listeners for token lifecycle email notifications.
+     */
+    protected function registerMailListeners(): void
+    {
+        Event::listen(
+            [TokenIssued::class, TokenRevoked::class, TokenRotated::class],
+            SendTokenLifecycleMail::class,
+        );
     }
 
     /**

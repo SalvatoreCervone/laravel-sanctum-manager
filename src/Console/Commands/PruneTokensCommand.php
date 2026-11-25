@@ -5,11 +5,7 @@ declare(strict_types=1);
 namespace SanctumManager\Console\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Schema;
-use SanctumManager\Models\PersonalAccessToken;
-use SanctumManager\Models\PersonalAccessTokenLog;
+use SanctumManager\Contracts\TokenManagerContract;
 
 /**
  * Prunes expired, revoked, and past-grace rotated tokens as well as old audit logs.
@@ -35,7 +31,7 @@ class PruneTokensCommand extends Command
     /**
      * Execute the console command.
      */
-    public function handle(): int
+    public function handle(TokenManagerContract $manager): int
     {
         $daysOption = $this->option('days');
         $logDaysOption = $this->option('log-days');
@@ -52,53 +48,11 @@ class PruneTokensCommand extends Command
             return self::FAILURE;
         }
 
-        $days = (int) $daysOption;
-        $logDays = (int) $logDaysOption;
-
-        $tokenCutoff = Carbon::now()->subDays($days);
-        $logCutoff = Carbon::now()->subDays($logDays);
-
-        $pruneQuery = PersonalAccessToken::query()
-            ->where(static function (Builder $query) use ($tokenCutoff): void {
-                $query->where(static function (Builder $expired) use ($tokenCutoff): void {
-                    $expired->whereNotNull('expires_at')
-                        ->where('expires_at', '<', $tokenCutoff);
-                });
-
-                if (PersonalAccessToken::usesExtendedColumns()) {
-                    $query->orWhere(static function (Builder $revoked) use ($tokenCutoff): void {
-                        $revoked->whereNotNull('revoked_at')
-                            ->where('revoked_at', '<', $tokenCutoff);
-                    })->orWhere(static function (Builder $rotated) use ($tokenCutoff): void {
-                        $rotated->whereNotNull('grace_expires_at')
-                            ->where('grace_expires_at', '<', $tokenCutoff);
-                    });
-                }
-            });
-
-        $prunedIds = (clone $pruneQuery)->pluck('id');
-
-        /** @var int $prunedTokens */
-        $prunedTokens = $pruneQuery->delete();
-
-        foreach ($prunedIds as $prunedId) {
-            if (is_int($prunedId) || is_string($prunedId)) {
-                PersonalAccessToken::forgetCache($prunedId);
-            }
-        }
-
-        $prunedLogs = 0;
-
-        if (Schema::hasTable('sanctum_token_logs')) {
-            /** @var int $prunedLogs */
-            $prunedLogs = PersonalAccessTokenLog::query()
-                ->where('created_at', '<', $logCutoff)
-                ->delete();
-        }
+        $result = $manager->prune((int) $daysOption, (int) $logDaysOption);
 
         $this->components->info('Sanctum Manager pruning completed.');
-        $this->components->twoColumnDetail('Pruned Tokens', (string) $prunedTokens);
-        $this->components->twoColumnDetail('Pruned Audit Logs', (string) $prunedLogs);
+        $this->components->twoColumnDetail('Pruned Tokens', (string) $result['tokens']);
+        $this->components->twoColumnDetail('Pruned Audit Logs', (string) $result['logs']);
 
         return self::SUCCESS;
     }

@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace SanctumManager\Services;
 
 use DateTimeInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\NewAccessToken;
 use RuntimeException;
@@ -21,6 +24,7 @@ use SanctumManager\Events\TokenRotated;
 use SanctumManager\Exceptions\TokenQuotaExceededException;
 use SanctumManager\Exceptions\TokenRevokedException;
 use SanctumManager\Models\PersonalAccessToken;
+use SanctumManager\Models\PersonalAccessTokenLog;
 
 class TokenLifecycleService implements TokenManagerContract
 {
@@ -256,6 +260,60 @@ class TokenLifecycleService implements TokenManagerContract
                 graceExpiresAt: $graceExpiresAt,
             );
         });
+    }
+
+    /**
+     * Prune expired, revoked, and past-grace tokens as well as stale audit logs.
+     *
+     * @return array{tokens: int, logs: int}
+     */
+    public function prune(int $days = 30, int $logDays = 90): array
+    {
+        $tokenCutoff = Carbon::now()->subDays(max(0, $days));
+        $logCutoff = Carbon::now()->subDays(max(0, $logDays));
+
+        $pruneQuery = PersonalAccessToken::query()
+            ->where(static function (Builder $query) use ($tokenCutoff): void {
+                $query->where(static function (Builder $expired) use ($tokenCutoff): void {
+                    $expired->whereNotNull('expires_at')
+                        ->where('expires_at', '<', $tokenCutoff);
+                });
+
+                if (PersonalAccessToken::usesExtendedColumns()) {
+                    $query->orWhere(static function (Builder $revoked) use ($tokenCutoff): void {
+                        $revoked->whereNotNull('revoked_at')
+                            ->where('revoked_at', '<', $tokenCutoff);
+                    })->orWhere(static function (Builder $rotated) use ($tokenCutoff): void {
+                        $rotated->whereNotNull('grace_expires_at')
+                            ->where('grace_expires_at', '<', $tokenCutoff);
+                    });
+                }
+            });
+
+        $prunedIds = (clone $pruneQuery)->pluck('id');
+
+        /** @var int $prunedTokens */
+        $prunedTokens = $pruneQuery->delete();
+
+        foreach ($prunedIds as $prunedId) {
+            if (is_int($prunedId) || is_string($prunedId)) {
+                PersonalAccessToken::forgetCache($prunedId);
+            }
+        }
+
+        $prunedLogs = 0;
+
+        if (Schema::hasTable('sanctum_token_logs')) {
+            /** @var int $prunedLogs */
+            $prunedLogs = PersonalAccessTokenLog::query()
+                ->where('created_at', '<', $logCutoff)
+                ->delete();
+        }
+
+        return [
+            'tokens' => $prunedTokens,
+            'logs' => $prunedLogs,
+        ];
     }
 
     /**

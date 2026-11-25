@@ -30,6 +30,8 @@ Gestione avanzata di **Scope / Abilities** e **Personal Access Token** per Larav
 - **Debounced Usage Logger & Token Caching**: riduce il carico sul database evitando `UPDATE` su `last_used_at` a ogni richiesta tramite debounce in Cache e offre caching opzionale su `findToken()` con invalidazione automatica.
 - **Middleware & Attributi PHP 8**: `sanctum.constraints`, `sanctum.scopes`, `sanctum.scope.any`, `sanctum.attributes` (`#[RequiresScope]`, `#[RequiresAnyScope]`).
 - **Rate Limiter Dinamico**: `throttle:sanctum-token` configurabile globalmente o per singolo token tramite `metadata['rate_limit_per_minute']`.
+- **Interfaccia Grafica Web (Dashboard) con Gate**: dashboard Blade integrata (zero build step, light/dark mode, modali nativi `<dialog>`) per gestire tutti i comandi da browser — emissione, rotazione, revoca singola/di massa, pruning, catalogo scope, audit log e test email — protetta dal Laravel Gate `viewSanctumManager`.
+- **Notifiche Email Automatiche**: invio automatico di email alla creazione (`TokenIssued`), revoca (`TokenRevoked`) e rotazione (`TokenRotated`) di un token, al proprietario del token e/o a destinatari amministrativi configurabili (senza mai esporre il secret in chiaro).
 - **6 Comandi Artisan & Endpoint API Headless opzionali**.
 
 ---
@@ -82,6 +84,9 @@ php artisan vendor:publish --tag=sanctum-manager-config
 # Solo migrazioni opzionali
 php artisan vendor:publish --tag=sanctum-manager-migrations
 php artisan migrate
+
+# Solo viste Blade (Dashboard UI e template Email)
+php artisan vendor:publish --tag=sanctum-manager-views
 ```
 
 ### 3. Configura il modello `User`
@@ -119,12 +124,27 @@ Il file `config/sanctum-manager.php` permette di configurare ogni aspetto del pa
 | `audit` | `update_interval_seconds`, `log_requests`, `driver` (`log` \| `database`) | `300` / `false` / `log` |
 | `cache` | `enabled`, `ttl_seconds`, `prefix` | `false` / `60` |
 | `routes` | `enabled`, `prefix`, `middleware` | `false` / `api/sanctum-manager` |
+| `dashboard` | `enabled`, `prefix`, `domain`, `middleware`, `gate`, `allowed_emails`, `allow_in_local`, `per_page` | `true` / `sanctum-manager` / `viewSanctumManager` |
+| `mail` | `enabled`, `events` (`issued`, `revoked`, `rotated`), `notify_token_owner`, `recipients`, `from`, `subject_prefix`, `queue` | `false` / tutti gli eventi attivi |
 
 Variabili d'ambiente supportate di default:
 
 ```env
 SANCTUM_MANAGER_STORAGE_MODE=zero_migration
 SANCTUM_TOKEN_PREFIX=
+
+# Dashboard & Access Gate
+SANCTUM_MANAGER_DASHBOARD_ENABLED=true
+SANCTUM_MANAGER_DASHBOARD_PREFIX=sanctum-manager
+SANCTUM_MANAGER_DASHBOARD_GATE=viewSanctumManager
+SANCTUM_MANAGER_ALLOWED_EMAILS=admin@example.com,ops@example.com
+SANCTUM_MANAGER_ALLOW_IN_LOCAL=true
+
+# Notifiche Email
+SANCTUM_MANAGER_MAIL_ENABLED=true
+SANCTUM_MANAGER_MAIL_RECIPIENTS=security@example.com
+SANCTUM_MANAGER_MAIL_SUBJECT_PREFIX="[Sanctum Manager]"
+SANCTUM_MANAGER_MAIL_QUEUE=false
 ```
 
 ---
@@ -244,7 +264,54 @@ Impostando `'routes' => ['enabled' => true]` in `config/sanctum-manager.php`, ve
 - `POST /tokens/{tokenId}/rotate` — Rotazione di un token
 - `DELETE /tokens/{tokenId}` — Revoca di un token
 
-### 6. Eventi
+### 6. Interfaccia Grafica Web (Dashboard) & Access Gate
+
+Il pacchetto include una **Dashboard Web pronta all'uso** (zero build step, Light/Dark mode) disponibile su `/sanctum-manager` che permette di eseguire tutte le operazioni gestionali da browser:
+
+- **Emissione Token**: selezione utente, scope/gruppi (`@readonly`), scadenza, IP/CIDR, Origin/Referer, `max_uses`, prefisso e rate limit, con visualizzazione *one-time* del token in chiaro e pulsante copia.
+- **Rotazione Token**: rotazione con *grace period* configurabile e nuovo nome opzionale.
+- **Revoca Singola & Revoca Totale Utente**: revoca di un singolo token o di tutti i token attivi di uno specifico utente con motivazione.
+- **Pruning**: pulizia immediata di token scaduti/revocati e vecchi audit log.
+- **Catalogo Scope & Gruppi**: consultazione di tutti gli scope registrati, gerarchie `implies` e preset.
+- **Audit Log**: visualizzazione dei log d'uso (in modalità Extended Migrations).
+- **Mail & Access**: riepilogo stato notifiche, Gate e invio di una **email di test** direttamente dalla UI.
+
+#### Controllo Accessi tramite Laravel Gate
+
+L'accesso alla dashboard è protetto dal middleware `sanctum.dashboard` tramite il Gate **`viewSanctumManager`** (stile Laravel Horizon / Telescope):
+
+1. **Via `.env` / configurazione** (per ambienti non locali):
+   ```env
+   SANCTUM_MANAGER_ALLOWED_EMAILS=admin@example.com,security@example.com
+   ```
+2. **Via Gate personalizzato** in `App\Providers\AppServiceProvider::boot()`:
+   ```php
+   use Illuminate\Support\Facades\Gate;
+
+   Gate::define('viewSanctumManager', function ($user): bool {
+       return in_array($user->email, [
+           'admin@example.com',
+       ], true) || $user->isAdmin();
+   });
+   ```
+
+> In ambiente `local` l'accesso è consentito automaticamente se `SANCTUM_MANAGER_ALLOW_IN_LOCAL=true`; in produzione ogni utente non autorizzato dal Gate riceve `403 Forbidden`.
+
+---
+
+### 7. Notifiche Email (Emissione, Revoca, Rotazione)
+
+Abilitando `SANCTUM_MANAGER_MAIL_ENABLED=true`, il pacchetto invia automaticamente email HTML responsive (personalizzabili pubblicando `--tag=sanctum-manager-views`) quando:
+
+- viene **emesso** un nuovo token (`TokenIssuedMail` — include nome, scope, scadenza, IP/Origin; **non include mai** il token in chiaro),
+- viene **revocato** un token (`TokenRevokedMail` — include nome e motivazione della revoca),
+- viene **ruotato** un token (`TokenRotatedMail` — include nome vecchio/nuovo e scadenza del grace period).
+
+Le email vengono inviate al proprietario del token (`notify_token_owner: true`) e/o agli indirizzi amministrativi configurati in `mail.recipients` (`SANCTUM_MANAGER_MAIL_RECIPIENTS`), con supporto opzionale all'invio in coda (`SANCTUM_MANAGER_MAIL_QUEUE=true`).
+
+---
+
+### 8. Eventi
 
 Il pacchetto emette eventi Laravel standard in `SanctumManager\Events\*`:
 

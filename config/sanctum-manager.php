@@ -162,4 +162,59 @@ return [
         'middleware' => ['api', 'auth:sanctum'],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Web Dashboard UI & Access Gate
+    |--------------------------------------------------------------------------
+    |
+    | Control the built-in graphical web dashboard for managing tokens, scopes,
+    | pruning, audit logs, and mail notifications. Access is strictly protected
+    | by a Laravel Gate (default: `viewSanctumManager`).
+    |
+    | You can either list authorized email addresses in `allowed_emails` (or via
+    | the comma-separated SANCTUM_MANAGER_ALLOWED_EMAILS env variable) or define
+    | your own `Gate::define('viewSanctumManager', fn ($user) => ...)` in your
+    | application's AppServiceProvider.
+    |
+    */
+    'dashboard' => [
+        'enabled' => (bool) env('SANCTUM_MANAGER_DASHBOARD_ENABLED', true),
+        'prefix' => env('SANCTUM_MANAGER_DASHBOARD_PREFIX', 'sanctum-manager'),
+        'domain' => env('SANCTUM_MANAGER_DASHBOARD_DOMAIN', null),
+        'middleware' => ['web', 'sanctum.dashboard'],
+        'gate' => env('SANCTUM_MANAGER_DASHBOARD_GATE', 'viewSanctumManager'),
+        'allowed_emails' => env('SANCTUM_MANAGER_ALLOWED_EMAILS', []),
+        'allow_in_local' => (bool) env('SANCTUM_MANAGER_ALLOW_IN_LOCAL', true),
+        'per_page' => 20,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Mail Notifications
+    |--------------------------------------------------------------------------
+    |
+    | Automatically send email notifications when personal access tokens are
+    | issued, revoked, or rotated. Plain-text token secrets are NEVER included
+    | in notification emails.
+    |
+    */
+    'mail' => [
+        'enabled' => (bool) env('SANCTUM_MANAGER_MAIL_ENABLED', false),
+        'events' => [
+            'issued' => true,
+            'revoked' => true,
+            'rotated' => true,
+        ],
+        'notify_token_owner' => true,
+        'recipients' => env('SANCTUM_MANAGER_MAIL_RECIPIENTS', []),
+        'from' => [
+            'address' => env('SANCTUM_MANAGER_MAIL_FROM_ADDRESS', null),
+            'name' => env('SANCTUM_MANAGER_MAIL_FROM_NAME', null),
+        ],
+        'subject_prefix' => env('SANCTUM_MANAGER_MAIL_SUBJECT_PREFIX', '[Sanctum Manager]'),
+        'queue' => (bool) env('SANCTUM_MANAGER_MAIL_QUEUE', false),
+        'queue_connection' => env('SANCTUM_MANAGER_MAIL_QUEUE_CONNECTION', null),
+        'queue_name' => env('SANCTUM_MANAGER_MAIL_QUEUE_NAME', null),
+    ],
+
 ];
