@@ -1,6 +1,13 @@
 {
-    "name": "salvatore/laravel-sanctum-manager",
+    "name": "salvatorecervone/laravel-sanctum-manager",
     "description": "Advanced Scope/Ability registry, hierarchical wildcards, token lifecycle management (rotation with grace period, IP/origin restrictions, max uses, debounced audit) for Laravel Sanctum — Zero-Migration first with optional extended migrations.",
+    "homepage": "https://github.com/SalvatoreCervone/laravel-sanctum-manager",
+    "authors": [
+        {
+            "name": "Salvatore Cervone",
+            "homepage": "https://github.com/SalvatoreCervone"
+        }
+    ],
     "keywords": [
         "laravel",
         "sanctum",
