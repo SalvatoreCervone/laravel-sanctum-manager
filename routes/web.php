@@ -26,6 +26,20 @@ Route::post('/tokens/prune', [DashboardController::class, 'prune'])
 Route::get('/scopes', [DashboardController::class, 'scopes'])
     ->name('sanctum-manager.dashboard.scopes');
 
+Route::post('/scopes', [DashboardController::class, 'storeScope'])
+    ->name('sanctum-manager.dashboard.scopes.store');
+
+Route::post('/scopes/groups', [DashboardController::class, 'storeGroup'])
+    ->name('sanctum-manager.dashboard.groups.store');
+
+Route::delete('/scopes/groups/{groupName}', [DashboardController::class, 'destroyGroup'])
+    ->where('groupName', '[a-zA-Z0-9:_-]+')
+    ->name('sanctum-manager.dashboard.groups.destroy');
+
+Route::delete('/scopes/{scopeName}', [DashboardController::class, 'destroyScope'])
+    ->where('scopeName', '[a-zA-Z0-9:_.*-]+')
+    ->name('sanctum-manager.dashboard.scopes.destroy');
+
 Route::get('/logs', [DashboardController::class, 'logs'])
     ->name('sanctum-manager.dashboard.logs');
 

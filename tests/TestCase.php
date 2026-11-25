@@ -71,6 +71,12 @@ abstract class TestCase extends Orchestra
         PersonalAccessToken::resetExtendedColumnsCache();
     }
 
+    protected function enableScopesMigrations(): void
+    {
+        $scopesMigration = require __DIR__.'/../database/migrations/create_sanctum_scopes_tables.php.stub';
+        $scopesMigration->up();
+    }
+
     protected function createUser(string $email = 'salvatore@example.com', string $name = 'Salvatore'): User
     {
         return User::query()->create([

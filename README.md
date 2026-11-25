@@ -81,12 +81,19 @@ Se preferisci pubblicare manualmente i file tramite `vendor:publish`:
 # Solo file di configurazione
 php artisan vendor:publish --tag=sanctum-manager-config
 
-# Solo migrazioni opzionali
+# Solo migrazioni opzionali (colonne estese, audit log e tabelle scope/gruppi)
 php artisan vendor:publish --tag=sanctum-manager-migrations
+php artisan migrate
+
+# Solo migrazione tabelle scope & gruppi (`sanctum_scopes`, `sanctum_scope_groups`)
+php artisan vendor:publish --tag=sanctum-manager-scopes-migration
 php artisan migrate
 
 # Solo viste Blade (Dashboard UI e template Email)
 php artisan vendor:publish --tag=sanctum-manager-views
+
+# Solo traduzioni (EN / IT)
+php artisan vendor:publish --tag=sanctum-manager-lang
 ```
 
 ### 3. Configura il modello `User`
@@ -116,7 +123,7 @@ Il file `config/sanctum-manager.php` permette di configurare ogni aspetto del pa
 | Sezione | Opzioni principali | Default |
 | --- | --- | --- |
 | `storage_mode` | `zero_migration`, `extended_columns`, `auto` | `zero_migration` |
-| `scopes` | `strict_validation`, `definitions`, `groups` | `strict_validation: false` |
+| `scopes` | `strict_validation`, `storage_driver` (`auto` \| `database` \| `file`), `storage_path`, `definitions`, `groups` | `strict_validation: false` / `auto` |
 | `tokens` | `default_expiration_minutes`, `max_tokens_per_user`, `quota_exceeded_strategy`, `token_prefix` | `null` / `throw_exception` |
 | `rotation` | `grace_period_minutes` | `30` |
 | `security` | `keep_revoked_tokens`, `enforce_ip_restrictions`, `enforce_origin_restrictions` | `false` / `true` / `true` |
@@ -132,6 +139,10 @@ Variabili d'ambiente supportate di default:
 ```env
 SANCTUM_MANAGER_STORAGE_MODE=zero_migration
 SANCTUM_TOKEN_PREFIX=
+
+# Scope & Gruppi dinamici (DB se migrato, altrimenti fallback su file JSON)
+SANCTUM_MANAGER_SCOPES_DRIVER=auto
+SANCTUM_MANAGER_SCOPES_PATH=
 
 # Dashboard & Access Gate
 SANCTUM_MANAGER_DASHBOARD_ENABLED=true
@@ -272,9 +283,10 @@ Il pacchetto include una **Dashboard Web pronta all'uso** (zero build step, Ligh
 - **Rotazione Token**: rotazione con *grace period* configurabile e nuovo nome opzionale.
 - **Revoca Singola & Revoca Totale Utente**: revoca di un singolo token o di tutti i token attivi di uno specifico utente con motivazione.
 - **Pruning**: pulizia immediata di token scaduti/revocati e vecchi audit log.
-- **Catalogo Scope & Gruppi**: consultazione di tutti gli scope registrati, gerarchie `implies` e preset.
+- **Catalogo & Gestione Scope e Gruppi (CRUD)**: creazione, modifica ed eliminazione di scope (con gerarchie `implies`, flag `default`/`deprecated`) e gruppi/preset direttamente dalla UI, con persistenza automatica su **Database** (`sanctum_scopes` / `sanctum_scope_groups` se migrati) oppure **fallback su file JSON** (`storage/app/sanctum-manager/scopes.json`) unito alla configurazione.
 - **Audit Log**: visualizzazione dei log d'uso (in modalità Extended Migrations).
 - **Mail & Access**: riepilogo stato notifiche, Gate e invio di una **email di test** direttamente dalla UI.
+- **Localizzazione EN / IT**: tutta la dashboard, i messaggi flash e le email sono tradotti in **Inglese** e **Italiano** (si adattano automaticamente a `APP_LOCALE=it` / `en`, personalizzabili pubblicando `--tag=sanctum-manager-lang`).
 
 #### Controllo Accessi tramite Laravel Gate
 

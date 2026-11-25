@@ -25,9 +25,12 @@ class TestNotificationMail extends Mailable
 
     public function envelope(): Envelope
     {
+        $translated = __('sanctum-manager::sanctum-manager.mail.test_subject');
+        $title = is_string($translated) ? $translated : 'Test Notification';
+
         return new Envelope(
             from: $this->resolveFromAddress(),
-            subject: $this->formatSubject('Test Notification'),
+            subject: $this->formatSubject($title),
         );
     }
 

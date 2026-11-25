@@ -28,9 +28,12 @@ class TokenRevokedMail extends Mailable
 
     public function envelope(): Envelope
     {
+        $translated = __('sanctum-manager::sanctum-manager.mail.revoked_subject', ['name' => $this->tokenName]);
+        $title = is_string($translated) ? $translated : "API Token Revoked: {$this->tokenName}";
+
         return new Envelope(
             from: $this->resolveFromAddress(),
-            subject: $this->formatSubject("Token Revoked: {$this->tokenName}"),
+            subject: $this->formatSubject($title),
         );
     }
 

@@ -113,6 +113,26 @@ class ScopeRegistry implements ScopeRegistryContract
     }
 
     /**
+     * Remove a scope definition from the registry.
+     */
+    public function forget(string $name): self
+    {
+        unset($this->scopes[$name]);
+
+        return $this;
+    }
+
+    /**
+     * Remove a scope group from the registry.
+     */
+    public function forgetGroup(string $name): self
+    {
+        unset($this->groups[$name]);
+
+        return $this;
+    }
+
+    /**
      * Clear all registered scopes and groups.
      */
     public function clear(): void

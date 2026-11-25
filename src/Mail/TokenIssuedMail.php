@@ -37,9 +37,12 @@ class TokenIssuedMail extends Mailable
 
     public function envelope(): Envelope
     {
+        $translated = __('sanctum-manager::sanctum-manager.mail.issued_subject', ['name' => $this->tokenName]);
+        $title = is_string($translated) ? $translated : "New API Token Issued: {$this->tokenName}";
+
         return new Envelope(
             from: $this->resolveFromAddress(),
-            subject: $this->formatSubject("Token Issued: {$this->tokenName}"),
+            subject: $this->formatSubject($title),
         );
     }
 

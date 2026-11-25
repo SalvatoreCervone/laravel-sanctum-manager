@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 use SanctumManager\Contracts\ScopeRegistryContract;
 use SanctumManager\Contracts\TokenManagerContract;
+use SanctumManager\DataTransferObjects\ScopeDefinition;
+use SanctumManager\DataTransferObjects\ScopeGroup;
 use SanctumManager\DataTransferObjects\TokenOptions;
 use SanctumManager\Exceptions\InvalidScopeException;
 use SanctumManager\Exceptions\TokenQuotaExceededException;
@@ -22,12 +24,14 @@ use SanctumManager\Http\Middleware\AuthorizeDashboard;
 use SanctumManager\Mail\TestNotificationMail;
 use SanctumManager\Models\PersonalAccessToken;
 use SanctumManager\Models\PersonalAccessTokenLog;
+use SanctumManager\Services\ScopeStore;
 
 class DashboardController
 {
     public function __construct(
         protected TokenManagerContract $tokenManager,
         protected ScopeRegistryContract $scopeRegistry,
+        protected ScopeStore $scopeStore,
     ) {}
 
     /**
@@ -133,7 +137,7 @@ class DashboardController
             return redirect()
                 ->back()
                 ->withInput()
-                ->with('sanctum_manager_error', "User [{$userIdentifier}] could not be found.");
+                ->with('sanctum_manager_error', __('sanctum-manager::sanctum-manager.flash.user_not_found', ['user' => $userIdentifier]));
         }
 
         $scopes = [];
@@ -200,7 +204,7 @@ class DashboardController
 
         return redirect()
             ->route('sanctum-manager.dashboard.index')
-            ->with('sanctum_manager_status', "Token \"{$name}\" issued successfully.")
+            ->with('sanctum_manager_status', __('sanctum-manager::sanctum-manager.flash.token_issued', ['name' => $name]))
             ->with('sanctum_manager_plain_token', [
                 'name' => $name,
                 'token' => $newAccessToken->plainTextToken,
@@ -226,7 +230,7 @@ class DashboardController
         if ($token === null) {
             return redirect()
                 ->back()
-                ->with('sanctum_manager_error', "Token #{$tokenId} was not found.");
+                ->with('sanctum_manager_error', __('sanctum-manager::sanctum-manager.flash.token_not_found'));
         }
 
         $graceMinutes = isset($validated['grace_period_minutes']) && is_numeric($validated['grace_period_minutes'])
@@ -250,7 +254,7 @@ class DashboardController
 
         return redirect()
             ->route('sanctum-manager.dashboard.index')
-            ->with('sanctum_manager_status', 'Token rotated successfully.')
+            ->with('sanctum_manager_status', __('sanctum-manager::sanctum-manager.flash.token_rotated'))
             ->with('sanctum_manager_plain_token', [
                 'name' => $newAccessToken->name,
                 'token' => $result->newToken->plainTextToken,
@@ -275,7 +279,7 @@ class DashboardController
         if ($token === null) {
             return redirect()
                 ->back()
-                ->with('sanctum_manager_error', "Token #{$tokenId} was not found.");
+                ->with('sanctum_manager_error', __('sanctum-manager::sanctum-manager.flash.token_not_found'));
         }
 
         $reason = isset($validated['reason']) && is_string($validated['reason']) && trim($validated['reason']) !== ''
@@ -286,7 +290,7 @@ class DashboardController
 
         return redirect()
             ->route('sanctum-manager.dashboard.index')
-            ->with('sanctum_manager_status', "Token \"{$token->name}\" revoked successfully.");
+            ->with('sanctum_manager_status', __('sanctum-manager::sanctum-manager.flash.token_revoked', ['name' => $token->name]));
     }
 
     /**
@@ -306,7 +310,7 @@ class DashboardController
         if ($user === null) {
             return redirect()
                 ->back()
-                ->with('sanctum_manager_error', "User [{$userIdentifier}] could not be found.");
+                ->with('sanctum_manager_error', __('sanctum-manager::sanctum-manager.flash.user_not_found', ['user' => $userIdentifier]));
         }
 
         $reason = isset($validated['reason']) && is_string($validated['reason']) && trim($validated['reason']) !== ''
@@ -317,7 +321,7 @@ class DashboardController
 
         return redirect()
             ->route('sanctum-manager.dashboard.index')
-            ->with('sanctum_manager_status', "Revoked {$count} active token(s).");
+            ->with('sanctum_manager_status', __('sanctum-manager::sanctum-manager.flash.user_tokens_revoked', ['count' => $count]));
     }
 
     /**
@@ -345,7 +349,10 @@ class DashboardController
             ->route('sanctum-manager.dashboard.index')
             ->with(
                 'sanctum_manager_status',
-                "Pruned {$result['tokens']} token(s) and {$result['logs']} audit log(s).",
+                __('sanctum-manager::sanctum-manager.flash.pruned', [
+                    'tokens' => $result['tokens'],
+                    'logs' => $result['logs'],
+                ]),
             );
     }
 
@@ -360,6 +367,10 @@ class DashboardController
         $storageMode = $this->resolveStorageMode();
         $hasLogsTable = Schema::hasTable('sanctum_token_logs');
         $mailEnabled = (bool) config('sanctum-manager.mail.enabled', false);
+        $scopeStorageDriver = $this->scopeStore->activeDriver();
+        $scopeStoragePath = $this->scopeStore->storagePath();
+        $persistedScopeNames = $this->scopeStore->persistedScopeNames();
+        $persistedGroupNames = $this->scopeStore->persistedGroupNames();
 
         return $this->renderView('sanctum-manager::dashboard.scopes', compact(
             'scopes',
@@ -368,7 +379,170 @@ class DashboardController
             'storageMode',
             'hasLogsTable',
             'mailEnabled',
+            'scopeStorageDriver',
+            'scopeStoragePath',
+            'persistedScopeNames',
+            'persistedGroupNames',
         ));
+    }
+
+    /**
+     * Create or update a persisted scope definition from the dashboard.
+     */
+    public function storeScope(Request $request): RedirectResponse
+    {
+        /** @var array<string, mixed> $validated */
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:120', 'regex:/^[a-zA-Z0-9:_.*-]+$/'],
+            'description' => ['nullable', 'string', 'max:255'],
+            'group' => ['nullable', 'string', 'max:100'],
+            'implies' => ['nullable', 'array'],
+            'implies.*' => ['string', 'max:120'],
+            'custom_implies' => ['nullable', 'string', 'max:500'],
+            'is_default' => ['nullable', 'boolean'],
+            'is_deprecated' => ['nullable', 'boolean'],
+        ]);
+
+        $name = is_string($validated['name'] ?? null) ? trim($validated['name']) : '';
+        $description = isset($validated['description']) && is_string($validated['description'])
+            ? trim($validated['description'])
+            : '';
+        $group = isset($validated['group']) && is_string($validated['group']) && trim($validated['group']) !== ''
+            ? trim($validated['group'])
+            : null;
+
+        $implies = [];
+        if (isset($validated['implies']) && is_array($validated['implies'])) {
+            foreach ($validated['implies'] as $implied) {
+                if (is_string($implied) && trim($implied) !== '') {
+                    $implies[] = trim($implied);
+                }
+            }
+        }
+
+        if (isset($validated['custom_implies']) && is_string($validated['custom_implies'])) {
+            foreach ($this->parseDelimitedList($validated['custom_implies']) as $customImplied) {
+                $implies[] = $customImplied;
+            }
+        }
+
+        $implies = array_values(array_filter(
+            array_unique($implies),
+            static fn (string $item): bool => $item !== $name,
+        ));
+
+        $isDefault = (bool) ($validated['is_default'] ?? false);
+        $isDeprecated = (bool) ($validated['is_deprecated'] ?? false);
+
+        $this->scopeStore->saveScope(new ScopeDefinition(
+            name: $name,
+            description: $description,
+            group: $group,
+            implies: $implies,
+            isDefault: $isDefault,
+            isDeprecated: $isDeprecated,
+        ));
+
+        return redirect()
+            ->route('sanctum-manager.dashboard.scopes')
+            ->with('sanctum_manager_status', __('sanctum-manager::sanctum-manager.flash.scope_saved', ['name' => $name]));
+    }
+
+    /**
+     * Delete a persisted scope definition from the dashboard.
+     */
+    public function destroyScope(string $scopeName): RedirectResponse
+    {
+        $deleted = $this->scopeStore->deleteScope($scopeName);
+
+        if (! $deleted) {
+            return redirect()
+                ->route('sanctum-manager.dashboard.scopes')
+                ->with(
+                    'sanctum_manager_error',
+                    __('sanctum-manager::sanctum-manager.flash.scope_delete_readonly', ['name' => $scopeName]),
+                );
+        }
+
+        return redirect()
+            ->route('sanctum-manager.dashboard.scopes')
+            ->with('sanctum_manager_status', __('sanctum-manager::sanctum-manager.flash.scope_deleted', ['name' => $scopeName]));
+    }
+
+    /**
+     * Create or update a persisted scope group from the dashboard.
+     */
+    public function storeGroup(Request $request): RedirectResponse
+    {
+        /** @var array<string, mixed> $validated */
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:100', 'regex:/^[a-zA-Z0-9:_-]+$/'],
+            'description' => ['nullable', 'string', 'max:255'],
+            'scopes' => ['nullable', 'array'],
+            'scopes.*' => ['string', 'max:120'],
+            'custom_scopes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $rawName = is_string($validated['name'] ?? null) ? trim($validated['name']) : '';
+        $name = ltrim($rawName, '@');
+        $description = isset($validated['description']) && is_string($validated['description'])
+            ? trim($validated['description'])
+            : '';
+
+        $mergedScopes = [];
+        if (isset($validated['scopes']) && is_array($validated['scopes'])) {
+            foreach ($validated['scopes'] as $scope) {
+                if (is_string($scope) && trim($scope) !== '') {
+                    $mergedScopes[] = trim($scope);
+                }
+            }
+        }
+
+        if (isset($validated['custom_scopes']) && is_string($validated['custom_scopes'])) {
+            foreach ($this->parseDelimitedList($validated['custom_scopes']) as $customScope) {
+                $mergedScopes[] = $customScope;
+            }
+        }
+
+        $mergedScopes = array_values(array_unique($mergedScopes));
+
+        if ($mergedScopes === []) {
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with('sanctum_manager_error', __('sanctum-manager::sanctum-manager.flash.group_scopes_required'));
+        }
+
+        $this->scopeStore->saveGroup(new ScopeGroup(
+            name: $name,
+            scopes: $mergedScopes,
+            description: $description,
+        ));
+
+        return redirect()
+            ->route('sanctum-manager.dashboard.scopes')
+            ->with('sanctum_manager_status', __('sanctum-manager::sanctum-manager.flash.group_saved', ['name' => $name]));
+    }
+
+    /**
+     * Delete a persisted scope group from the dashboard.
+     */
+    public function destroyGroup(string $groupName): RedirectResponse
+    {
+        $deleted = $this->scopeStore->deleteGroup($groupName);
+
+        if (! $deleted) {
+            return redirect()
+                ->route('sanctum-manager.dashboard.scopes')
+                ->with(
+                    'sanctum_manager_error',
+                    __('sanctum-manager::sanctum-manager.flash.group_delete_readonly', ['name' => $groupName]),
+                );
+        }
+
+        return redirect()
+            ->route('sanctum-manager.dashboard.scopes')
+            ->with('sanctum_manager_status', __('sanctum-manager::sanctum-manager.flash.group_deleted', ['name' => $groupName]));
     }
 
     /**
@@ -438,7 +612,7 @@ class DashboardController
 
         return redirect()
             ->route('sanctum-manager.dashboard.mail')
-            ->with('sanctum_manager_status', "Test notification email sent to {$email}.");
+            ->with('sanctum_manager_status', __('sanctum-manager::sanctum-manager.flash.test_mail_sent', ['email' => $email]));
     }
 
     /**

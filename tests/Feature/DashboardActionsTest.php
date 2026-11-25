@@ -325,7 +325,7 @@ class DashboardActionsTest extends TestCase
         $this->actingAs($this->admin)
             ->get('/sanctum-manager/logs')
             ->assertOk()
-            ->assertSee('sanctum_token_logs');
+            ->assertSee('Audit Log Table Not Migrated');
 
         // Extended mode: table exists and renders log entries
         $this->enableExtendedMigrations();

@@ -37,6 +37,16 @@ return [
         'strict_validation' => false,
 
         /*
+         * Dynamic scope & group persistence driver for Dashboard CRUD:
+         * - 'auto'     : Uses `sanctum_scopes` / `sanctum_scope_groups` DB tables
+         *                if migrated, otherwise falls back to the JSON file store.
+         * - 'database' : Always stores dynamic scopes & groups in the database.
+         * - 'file'     : Always stores dynamic scopes & groups in the fallback JSON file.
+         */
+        'storage_driver' => env('SANCTUM_MANAGER_SCOPES_DRIVER', 'auto'),
+        'storage_path' => env('SANCTUM_MANAGER_SCOPES_PATH', null),
+
+        /*
          * Example:
          * 'orders:read' => [
          *     'description' => 'Read orders',

@@ -29,9 +29,12 @@ class TokenRotatedMail extends Mailable
 
     public function envelope(): Envelope
     {
+        $translated = __('sanctum-manager::sanctum-manager.mail.rotated_subject', ['name' => $this->oldTokenName]);
+        $title = is_string($translated) ? $translated : "API Token Rotated: {$this->oldTokenName}";
+
         return new Envelope(
             from: $this->resolveFromAddress(),
-            subject: $this->formatSubject("Token Rotated: {$this->oldTokenName}"),
+            subject: $this->formatSubject($title),
         );
     }
 

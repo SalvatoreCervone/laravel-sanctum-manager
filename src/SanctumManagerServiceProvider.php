@@ -35,6 +35,7 @@ use SanctumManager\Models\PersonalAccessToken;
 use SanctumManager\Scopes\ScopeMatcher;
 use SanctumManager\Scopes\ScopeRegistry;
 use SanctumManager\Services\DebouncedUsageLogger;
+use SanctumManager\Services\ScopeStore;
 use SanctumManager\Services\TokenLifecycleService;
 
 class SanctumManagerServiceProvider extends ServiceProvider
@@ -55,10 +56,14 @@ class SanctumManagerServiceProvider extends ServiceProvider
                 $registry->loadFromConfig($scopesConfig);
             }
 
+            (new ScopeStore($registry))->syncToRegistry($registry);
+
             return $registry;
         });
 
         $this->app->alias(ScopeRegistryContract::class, ScopeRegistry::class);
+
+        $this->app->singleton(ScopeStore::class);
 
         $this->app->singleton(ScopeMatcher::class, function ($app): ScopeMatcher {
             return new ScopeMatcher($app->make(ScopeRegistryContract::class));
@@ -82,6 +87,7 @@ class SanctumManagerServiceProvider extends ServiceProvider
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
 
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'sanctum-manager');
+        $this->loadTranslationsFrom(__DIR__.'/../lang', 'sanctum-manager');
 
         $this->registerPublishables();
         $this->registerMiddleware();
@@ -111,15 +117,27 @@ class SanctumManagerServiceProvider extends ServiceProvider
 
         $timestamp1 = date('Y_m_d_His');
         $timestamp2 = date('Y_m_d_His', time() + 1);
+        $timestamp3 = date('Y_m_d_His', time() + 2);
+
+        $scopesMigrationPath = database_path("migrations/{$timestamp3}_create_sanctum_scopes_tables.php");
 
         $this->publishes([
             __DIR__.'/../database/migrations/add_manager_columns_to_personal_access_tokens_table.php.stub' => database_path("migrations/{$timestamp1}_add_manager_columns_to_personal_access_tokens_table.php"),
             __DIR__.'/../database/migrations/create_sanctum_token_logs_table.php.stub' => database_path("migrations/{$timestamp2}_create_sanctum_token_logs_table.php"),
+            __DIR__.'/../database/migrations/create_sanctum_scopes_tables.php.stub' => $scopesMigrationPath,
         ], 'sanctum-manager-migrations');
+
+        $this->publishes([
+            __DIR__.'/../database/migrations/create_sanctum_scopes_tables.php.stub' => $scopesMigrationPath,
+        ], 'sanctum-manager-scopes-migration');
 
         $this->publishes([
             __DIR__.'/../resources/views' => resource_path('views/vendor/sanctum-manager'),
         ], 'sanctum-manager-views');
+
+        $this->publishes([
+            __DIR__.'/../lang' => $this->app->langPath('vendor/sanctum-manager'),
+        ], 'sanctum-manager-lang');
     }
 
     /**

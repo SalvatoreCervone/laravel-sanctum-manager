@@ -1,6 +1,6 @@
 @extends('sanctum-manager::dashboard.layout')
 
-@section('title', 'Audit Logs')
+@section('title', __('sanctum-manager::sanctum-manager.logs.title'))
 
 @section('content')
 @php
@@ -11,25 +11,25 @@
 
 <div class="sm-page-head">
     <div>
-        <h1 class="sm-page-title">Audit Logs</h1>
-        <p class="sm-page-subtitle">Per-request API token activity recorded by the Sanctum Manager audit logger.</p>
+        <h1 class="sm-page-title">{{ __('sanctum-manager::sanctum-manager.logs.title') }}</h1>
+        <p class="sm-page-subtitle">{{ __('sanctum-manager::sanctum-manager.logs.subtitle') }}</p>
     </div>
     <div class="sm-actions">
         <span class="sm-badge {{ $logRequests ? 'sm-badge-success' : 'sm-badge-neutral' }}">
             <span class="sm-badge-dot" aria-hidden="true"></span>
-            Request Logging: {{ $logRequests ? 'Enabled' : 'Disabled' }}
+            {{ $logRequests ? __('sanctum-manager::sanctum-manager.common.enabled') : __('sanctum-manager::sanctum-manager.common.disabled') }}
         </span>
         <span class="sm-badge sm-badge-info">
-            Driver: <span class="mono">{{ $auditDriver }}</span>
+            <span class="mono">{{ $auditDriver }}</span>
         </span>
         <span class="sm-badge sm-badge-neutral">
-            Debounce: <span class="mono">{{ $updateInterval }}s</span>
+            <span class="mono">{{ $updateInterval }}s</span>
         </span>
     </div>
 </div>
 
 @if (! $hasLogsTable)
-    <section class="sm-card" aria-label="Extended migrations required">
+    <section class="sm-card" aria-label="{{ __('sanctum-manager::sanctum-manager.logs.not_migrated_title') }}">
         <div class="sm-empty">
             <div class="sm-empty-icon" aria-hidden="true">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -38,28 +38,24 @@
                     <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
                 </svg>
             </div>
-            <h3>Extended Audit Log Table Not Installed</h3>
-            <p>
-                Sanctum Manager is currently running without the optional <code>sanctum_token_logs</code> table (Zero-Migration mode).
-                To persist and inspect per-request token audit logs in this dashboard, publish and run the optional extended migrations:
-            </p>
+            <h3>{{ __('sanctum-manager::sanctum-manager.logs.not_migrated_title') }}</h3>
+            <p>{{ __('sanctum-manager::sanctum-manager.logs.not_migrated_body') }}</p>
             <div style="max-width:600px;margin:16px auto 0;text-align:left;">
                 <pre class="sm-pre" id="sm-migrate-cmd">php artisan sanctum-manager:install --with-migrations &amp;&amp; php artisan migrate</pre>
                 <div style="margin-top:10px;text-align:center;">
-                    <button type="button" class="sm-btn sm-btn-sm" data-copy-target="sm-migrate-cmd">Copy Command</button>
+                    <button type="button" class="sm-btn sm-btn-sm" data-copy-target="sm-migrate-cmd">{{ __('sanctum-manager::sanctum-manager.common.copy') }}</button>
                 </div>
             </div>
         </div>
     </section>
 @else
-    <section class="sm-card" aria-label="Audit logs table">
+    <section class="sm-card" aria-label="{{ __('sanctum-manager::sanctum-manager.logs.title') }}">
         <div class="sm-card-header">
             <div>
-                <h2 class="sm-card-title">Recent Requests</h2>
-                <p class="sm-card-subtitle">Newest API requests authenticated with Sanctum personal access tokens.</p>
+                <h2 class="sm-card-title">{{ __('sanctum-manager::sanctum-manager.logs.title') }}</h2>
             </div>
             @if ($logs)
-                <span class="sm-badge sm-badge-neutral">{{ number_format($logs->total()) }} total entries</span>
+                <span class="sm-badge sm-badge-neutral">{{ number_format($logs->total()) }}</span>
             @endif
         </div>
 
@@ -73,28 +69,21 @@
                         <line x1="16" y1="17" x2="8" y2="17"/>
                     </svg>
                 </div>
-                <h3>No audit logs recorded yet</h3>
-                <p>
-                    @if (! $logRequests)
-                        Request logging is currently disabled. Set <code>SANCTUM_MANAGER_LOG_REQUESTS=true</code> to start recording API requests.
-                    @else
-                        Authenticated API requests using Sanctum Manager middleware will appear here automatically.
-                    @endif
-                </p>
+                <h3>{{ __('sanctum-manager::sanctum-manager.logs.empty') }}</h3>
             </div>
         @else
             <div class="sm-table-wrap">
                 <table class="sm-table">
                     <thead>
                         <tr>
-                            <th>ID</th>
-                            <th>Token</th>
-                            <th>Method</th>
-                            <th>Path</th>
-                            <th>Status</th>
-                            <th>IP</th>
-                            <th>User Agent</th>
-                            <th>Timestamp</th>
+                            <th>{{ __('sanctum-manager::sanctum-manager.logs.col_id') }}</th>
+                            <th>{{ __('sanctum-manager::sanctum-manager.logs.col_token') }}</th>
+                            <th>{{ __('sanctum-manager::sanctum-manager.logs.col_method') }}</th>
+                            <th>{{ __('sanctum-manager::sanctum-manager.logs.col_path') }}</th>
+                            <th>{{ __('sanctum-manager::sanctum-manager.logs.col_status') }}</th>
+                            <th>{{ __('sanctum-manager::sanctum-manager.logs.col_ip') }}</th>
+                            <th>{{ __('sanctum-manager::sanctum-manager.logs.col_user_agent') }}</th>
+                            <th>{{ __('sanctum-manager::sanctum-manager.logs.col_time') }}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -127,9 +116,9 @@
                                 <td>
                                     @if ($log->token)
                                         <div class="sm-cell-title">{{ $log->token->name }}</div>
-                                        <div class="sm-cell-sub mono">Token #{{ $log->personal_access_token_id }}</div>
+                                        <div class="sm-cell-sub mono">#{{ $log->personal_access_token_id }}</div>
                                     @else
-                                        <span class="mono">Token #{{ $log->personal_access_token_id }}</span>
+                                        <span class="mono">#{{ $log->personal_access_token_id }}</span>
                                     @endif
                                 </td>
                                 <td style="white-space:nowrap;">
@@ -166,15 +155,15 @@
             </div>
 
             @if ($logs->hasPages())
-                <div class="sm-pagination" role="navigation" aria-label="Audit logs pagination">
+                <div class="sm-pagination" role="navigation" aria-label="{{ __('sanctum-manager::sanctum-manager.logs.title') }}">
                     <div>
-                        Showing <strong>{{ $logs->firstItem() }}</strong> to <strong>{{ $logs->lastItem() }}</strong> of <strong>{{ $logs->total() }}</strong> entries
+                        {{ __('sanctum-manager::sanctum-manager.common.showing', ['from' => $logs->firstItem(), 'to' => $logs->lastItem(), 'total' => $logs->total()]) }}
                     </div>
                     <div class="sm-pagination-links">
                         <a href="{{ $logs->previousPageUrl() ?: '#' }}"
                            class="sm-page-link {{ $logs->onFirstPage() ? 'is-disabled' : '' }}"
                            @if($logs->onFirstPage()) aria-disabled="true" tabindex="-1" @endif>
-                            Prev
+                            {{ __('sanctum-manager::sanctum-manager.common.previous') }}
                         </a>
                         @php
                             $startPage = max(1, $logs->currentPage() - 2);
@@ -190,7 +179,7 @@
                         <a href="{{ $logs->nextPageUrl() ?: '#' }}"
                            class="sm-page-link {{ ! $logs->hasMorePages() ? 'is-disabled' : '' }}"
                            @if(! $logs->hasMorePages()) aria-disabled="true" tabindex="-1" @endif>
-                            Next
+                            {{ __('sanctum-manager::sanctum-manager.common.next') }}
                         </a>
                     </div>
                 </div>

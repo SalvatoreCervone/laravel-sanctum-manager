@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Dashboard') — Sanctum Manager</title>
+    <title>@yield('title', __('sanctum-manager::sanctum-manager.nav.tokens')) — {{ __('sanctum-manager::sanctum-manager.app_name') }}</title>
     <script>
         (function () {
             try {
@@ -1142,7 +1142,9 @@
 @php
     $storageModeValue = $storageMode ?? 'zero_migration';
     $isExtendedStorage = $storageModeValue === 'extended_columns' || $storageModeValue === 'Extended Columns';
-    $storageLabel = $isExtendedStorage ? 'Extended Columns' : 'Zero-Migration';
+    $storageLabel = $isExtendedStorage
+        ? __('sanctum-manager::sanctum-manager.badges.storage_extended')
+        : __('sanctum-manager::sanctum-manager.badges.storage_zero');
     $isMailEnabled = (bool) ($mailEnabled ?? false);
 @endphp
 
@@ -1157,52 +1159,52 @@
                         <path d="M12 13v3"/>
                     </svg>
                 </span>
-                <span>Sanctum Manager</span>
+                <span>{{ __('sanctum-manager::sanctum-manager.app_name') }}</span>
             </a>
 
-            <nav class="sm-nav" aria-label="Dashboard navigation">
+            <nav class="sm-nav" aria-label="{{ __('sanctum-manager::sanctum-manager.app_name') }}">
                 <a href="{{ route('sanctum-manager.dashboard.index') }}"
                    class="sm-nav-link {{ request()->routeIs('sanctum-manager.dashboard.index') ? 'is-active' : '' }}"
                    @if(request()->routeIs('sanctum-manager.dashboard.index')) aria-current="page" @endif>
-                    Tokens
+                    {{ __('sanctum-manager::sanctum-manager.nav.tokens') }}
                 </a>
                 <a href="{{ route('sanctum-manager.dashboard.scopes') }}"
                    class="sm-nav-link {{ request()->routeIs('sanctum-manager.dashboard.scopes') ? 'is-active' : '' }}"
                    @if(request()->routeIs('sanctum-manager.dashboard.scopes')) aria-current="page" @endif>
-                    Scopes &amp; Groups
+                    {{ __('sanctum-manager::sanctum-manager.nav.scopes') }}
                 </a>
                 <a href="{{ route('sanctum-manager.dashboard.logs') }}"
                    class="sm-nav-link {{ request()->routeIs('sanctum-manager.dashboard.logs') ? 'is-active' : '' }}"
                    @if(request()->routeIs('sanctum-manager.dashboard.logs')) aria-current="page" @endif>
-                    Audit Logs
+                    {{ __('sanctum-manager::sanctum-manager.nav.logs') }}
                 </a>
                 <a href="{{ route('sanctum-manager.dashboard.mail') }}"
                    class="sm-nav-link {{ request()->routeIs('sanctum-manager.dashboard.mail') ? 'is-active' : '' }}"
                    @if(request()->routeIs('sanctum-manager.dashboard.mail')) aria-current="page" @endif>
-                    Mail &amp; Access
+                    {{ __('sanctum-manager::sanctum-manager.nav.mail') }}
                 </a>
             </nav>
         </div>
 
         <div class="sm-header-right">
-            <span class="sm-badge {{ $isExtendedStorage ? 'sm-badge-info' : 'sm-badge-neutral' }}" title="Active storage mode">
+            <span class="sm-badge {{ $isExtendedStorage ? 'sm-badge-info' : 'sm-badge-neutral' }}" title="{{ $storageLabel }}">
                 <span class="sm-badge-dot" aria-hidden="true"></span>
                 {{ $storageLabel }}
             </span>
 
             <a href="{{ route('sanctum-manager.dashboard.mail') }}"
                class="sm-badge {{ $isMailEnabled ? 'sm-badge-success' : 'sm-badge-neutral' }}"
-               title="Lifecycle mail notifications status"
+               title="{{ __('sanctum-manager::sanctum-manager.mail_page.mail_card_title') }}"
                style="text-decoration: none;">
                 <span class="sm-badge-dot" aria-hidden="true"></span>
-                Mail: {{ $isMailEnabled ? 'On' : 'Off' }}
+                {{ $isMailEnabled ? __('sanctum-manager::sanctum-manager.badges.mail_on') : __('sanctum-manager::sanctum-manager.badges.mail_off') }}
             </a>
 
             <button type="button"
                     class="sm-icon-btn"
                     id="sm-theme-toggle"
-                    aria-label="Toggle color theme"
-                    title="Toggle light/dark theme">
+                    aria-label="{{ __('sanctum-manager::sanctum-manager.toggle_theme') }}"
+                    title="{{ __('sanctum-manager::sanctum-manager.toggle_theme') }}">
                 <svg id="sm-theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
                     <circle cx="12" cy="12" r="4"/>
                     <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
@@ -1258,7 +1260,9 @@
     @if (is_array(session('sanctum_manager_plain_token')))
         @php
             $plainToken = session('sanctum_manager_plain_token');
-            $tokenAction = ($plainToken['action'] ?? 'issued') === 'rotated' ? 'Token Rotated' : 'Token Issued';
+            $secretTitle = ($plainToken['action'] ?? 'issued') === 'rotated'
+                ? __('sanctum-manager::sanctum-manager.secret_banner.rotated_title', ['name' => $plainToken['name'] ?? ''])
+                : __('sanctum-manager::sanctum-manager.secret_banner.issued_title', ['name' => $plainToken['name'] ?? '']);
         @endphp
         <section class="sm-secret-box" aria-labelledby="sm-secret-heading" role="region">
             <div class="sm-secret-head">
@@ -1266,17 +1270,17 @@
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--warning-dot);" aria-hidden="true">
                         <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
                     </svg>
-                    <span>{{ $tokenAction }}: <span class="mono">{{ $plainToken['name'] ?? '' }}</span></span>
+                    <span>{{ $secretTitle }}</span>
                 </h2>
                 @if (! empty($plainToken['grace_expires_at']))
                     <span class="sm-badge sm-badge-warning">
                         <span class="sm-badge-dot" aria-hidden="true"></span>
-                        Previous token grace period until {{ $plainToken['grace_expires_at'] }}
+                        {{ __('sanctum-manager::sanctum-manager.secret_banner.grace_notice', ['until' => $plainToken['grace_expires_at']]) }}
                     </span>
                 @endif
             </div>
             <p class="sm-secret-warning">
-                Copy this plaintext API token now. For security, it is only displayed once and will never be shown again.
+                {{ __('sanctum-manager::sanctum-manager.secret_banner.warning') }}
             </p>
             <div class="sm-secret-row">
                 <div class="sm-secret-code" id="sm-plain-token-value">{{ $plainToken['token'] ?? '' }}</div>
@@ -1284,7 +1288,7 @@
                         class="sm-btn sm-btn-primary"
                         data-copy-target="sm-plain-token-value"
                         aria-live="polite">
-                    Copy Token
+                    {{ __('sanctum-manager::sanctum-manager.secret_banner.copy_button') }}
                 </button>
             </div>
         </section>
@@ -1294,8 +1298,8 @@
 </main>
 
 <footer class="sm-footer">
-    <span>Laravel Sanctum Manager Dashboard</span>
-    <span>Storage: <strong class="mono">{{ $storageLabel }}</strong></span>
+    <span>{{ __('sanctum-manager::sanctum-manager.app_name') }}</span>
+    <span><strong class="mono">{{ $storageLabel }}</strong></span>
 </footer>
 
 <script>
@@ -1321,7 +1325,6 @@
             }
             if (toggleBtn) {
                 toggleBtn.setAttribute('aria-pressed', current === 'dark' ? 'true' : 'false');
-                toggleBtn.setAttribute('title', current === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
             }
         }
 
@@ -1369,13 +1372,13 @@
                 var target = document.getElementById(copyBtn.getAttribute('data-copy-target'));
                 if (target) {
                     var originalLabel = copyBtn.textContent;
+                    var copiedLabel = @json(__('sanctum-manager::sanctum-manager.common.copied'));
                     copyText(target.textContent.trim()).then(function () {
-                        copyBtn.textContent = 'Copied!';
+                        copyBtn.textContent = copiedLabel;
                         setTimeout(function () {
                             copyBtn.textContent = originalLabel;
                         }, 2000);
                     }).catch(function () {
-                        copyBtn.textContent = 'Copy failed';
                         setTimeout(function () {
                             copyBtn.textContent = originalLabel;
                         }, 2000);

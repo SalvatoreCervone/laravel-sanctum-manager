@@ -75,6 +75,16 @@ interface ScopeRegistryContract
     public function resolveAndExpand(array $requested, ?bool $strict = null): array;
 
     /**
+     * Remove a scope definition from the registry.
+     */
+    public function forget(string $name): self;
+
+    /**
+     * Remove a scope group from the registry.
+     */
+    public function forgetGroup(string $name): self;
+
+    /**
      * Clear all registered scopes and groups.
      */
     public function clear(): void;

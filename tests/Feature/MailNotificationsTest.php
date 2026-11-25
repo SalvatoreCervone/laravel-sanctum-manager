@@ -77,7 +77,7 @@ class MailNotificationsTest extends TestCase
             $this->assertCount(2, $mail->to);
 
             $envelope = $mail->envelope();
-            $this->assertSame('[MyApp Security] Token Issued: CI Deploy Token', $envelope->subject);
+            $this->assertSame('[MyApp Security] New API Token Issued: CI Deploy Token', $envelope->subject);
             $this->assertNotNull($envelope->from);
             $this->assertSame('noreply@example.com', $envelope->from->address);
             $this->assertSame('MyApp Bot', $envelope->from->name);
@@ -150,7 +150,7 @@ class MailNotificationsTest extends TestCase
             $this->assertTrue($mail->hasTo('bob@example.com'));
             $this->assertSame('Legacy Integration', $mail->tokenName);
             $this->assertSame('Suspected key exposure', $mail->reason);
-            $this->assertSame('[Sanctum Manager] Token Revoked: Legacy Integration', $mail->envelope()->subject);
+            $this->assertSame('[Sanctum Manager] API Token Revoked: Legacy Integration', $mail->envelope()->subject);
 
             $html = $mail->render();
             $this->assertStringContainsString('Legacy Integration', $html);
@@ -221,7 +221,7 @@ class MailNotificationsTest extends TestCase
             $this->assertSame('Mobile Client', $mail->oldTokenName);
             $this->assertSame('Mobile Client v2', $mail->newTokenName);
             $this->assertNotEmpty($mail->graceExpiresAt);
-            $this->assertSame('[Sanctum Manager] Token Rotated: Mobile Client', $mail->envelope()->subject);
+            $this->assertSame('[Sanctum Manager] API Token Rotated: Mobile Client', $mail->envelope()->subject);
 
             $html = $mail->render();
             $this->assertStringContainsString('Mobile Client', $html);
@@ -359,8 +359,43 @@ class MailNotificationsTest extends TestCase
         $this->assertSame('[Sanctum Test] Test Notification', $mail->envelope()->subject);
 
         $html = $mail->render();
-        $this->assertStringContainsString('Mail notifications are working', $html);
+        $this->assertStringContainsString('Test Notification Email', $html);
         $this->assertStringContainsString('admin@example.com', $html);
         $this->assertStringContainsString('2026-11-25T13:15:00+00:00', $html);
+    }
+
+    #[Test]
+    public function it_renders_localized_italian_mail_subjects_and_templates(): void
+    {
+        app()->setLocale('it');
+
+        $issued = new TokenIssuedMail(
+            tokenName: 'Token Produzione',
+            scopes: ['orders:read'],
+            ownerName: 'Mario Rossi',
+            ownerEmail: 'mario@example.com',
+        );
+
+        $this->assertSame('[Sanctum Manager] Nuovo Token API Emesso: Token Produzione', $issued->envelope()->subject);
+        $issuedHtml = $issued->render();
+        $this->assertStringContainsString('Nuovo Personal Access Token Emesso', $issuedHtml);
+        $this->assertStringContainsString('Nome Token', $issuedHtml);
+        $this->assertStringContainsString('Proprietario', $issuedHtml);
+
+        $revoked = new TokenRevokedMail(tokenName: 'Vecchio Token', reason: 'Scaduto');
+        $this->assertSame('[Sanctum Manager] Token API Revocato: Vecchio Token', $revoked->envelope()->subject);
+        $this->assertStringContainsString('Motivazione Revoca', $revoked->render());
+
+        $rotated = new TokenRotatedMail(
+            oldTokenName: 'Token v1',
+            newTokenName: 'Token v2',
+            graceExpiresAt: '2026-11-25T15:00:00+00:00',
+        );
+        $this->assertSame('[Sanctum Manager] Token API Ruotato: Token v1', $rotated->envelope()->subject);
+        $this->assertStringContainsString('Grace Period Fino Al', $rotated->render());
+
+        $test = new TestNotificationMail(recipientEmail: 'admin@example.com');
+        $this->assertSame('[Sanctum Manager] Notifica di Test', $test->envelope()->subject);
+        $this->assertStringContainsString('Email di Test', $test->render());
     }
 }
