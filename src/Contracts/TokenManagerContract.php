@@ -49,6 +49,13 @@ interface TokenManagerContract
     ): RotatedTokenResult;
 
     /**
+     * Replace the scopes assigned to an existing active personal access token.
+     *
+     * @param  array<int, string>  $scopes
+     */
+    public function updateScopes(PersonalAccessToken $token, array $scopes): PersonalAccessToken;
+
+    /**
      * Prune expired, revoked, and past-grace tokens as well as stale audit logs.
      *
      * @return array{tokens: int, logs: int}

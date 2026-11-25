@@ -59,9 +59,9 @@ class InstallCommand extends Command
             );
 
         if ($publishOptionalMigrations) {
+            // Never pass --force to migrations so already-published production migrations are never overwritten.
             $this->call('vendor:publish', [
                 '--tag' => 'sanctum-manager-migrations',
-                '--force' => $force,
             ]);
 
             $this->components->info(

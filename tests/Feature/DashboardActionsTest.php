@@ -377,4 +377,75 @@ class DashboardActionsTest extends TestCase
                 && $mail->recipientEmail === 'security@example.com';
         });
     }
+
+    public function test_update_token_scopes_preserves_zero_migration_metadata_and_expands_implications(): void
+    {
+        /** @var ScopeRegistryContract $registry */
+        $registry = app(ScopeRegistryContract::class);
+        $registry->define('orders:read', 'Read orders');
+        $registry->define('orders:write', 'Write orders', 'orders', ['orders:read']);
+        $registry->define('billing:read', 'Read billing');
+
+        /** @var TokenManagerContract $manager */
+        $manager = app(TokenManagerContract::class);
+        $issued = $manager->issue(
+            $this->admin,
+            'Editable Token',
+            ['billing:read'],
+            TokenOptions::make()
+                ->allowIps(['10.0.0.1'])
+                ->maxUses(250),
+        );
+
+        /** @var PersonalAccessToken $token */
+        $token = $issued->accessToken;
+
+        $this->actingAs($this->admin)
+            ->patch("/sanctum-manager/tokens/{$token->getKey()}/scopes", [
+                'scopes' => ['orders:write'],
+                'custom_scopes' => 'reports:export',
+            ])
+            ->assertRedirect(route('sanctum-manager.dashboard.index'))
+            ->assertSessionHas('sanctum_manager_status');
+
+        $token->refresh();
+
+        $this->assertSame(['orders:write', 'orders:read', 'reports:export'], $token->getEffectiveScopes());
+        $this->assertSame(['10.0.0.1'], $token->getAllowedIps());
+        $this->assertSame(250, $token->getMaxUses());
+    }
+
+    public function test_update_token_scopes_rejects_empty_scopes_and_revoked_tokens(): void
+    {
+        $this->enableExtendedMigrations();
+        config()->set('sanctum-manager.security.keep_revoked_tokens', true);
+
+        /** @var TokenManagerContract $manager */
+        $manager = app(TokenManagerContract::class);
+        $issued = $manager->issue($this->admin, 'Guarded Token', ['orders:read']);
+
+        /** @var PersonalAccessToken $token */
+        $token = $issued->accessToken;
+
+        // Empty scopes rejected
+        $this->actingAs($this->admin)
+            ->from('/sanctum-manager')
+            ->patch("/sanctum-manager/tokens/{$token->getKey()}/scopes", [
+                'scopes' => [],
+                'custom_scopes' => '',
+            ])
+            ->assertRedirect('/sanctum-manager')
+            ->assertSessionHas('sanctum_manager_error');
+
+        // Revoked token rejected
+        $manager->revoke($token, 'Compromised');
+
+        $this->actingAs($this->admin)
+            ->from('/sanctum-manager')
+            ->patch("/sanctum-manager/tokens/{$token->getKey()}/scopes", [
+                'scopes' => ['orders:write'],
+            ])
+            ->assertRedirect('/sanctum-manager')
+            ->assertSessionHas('sanctum_manager_error');
+    }
 }

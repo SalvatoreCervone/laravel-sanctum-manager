@@ -115,15 +115,13 @@ class SanctumManagerServiceProvider extends ServiceProvider
             __DIR__.'/../config/sanctum-manager.php' => config_path('sanctum-manager.php'),
         ], 'sanctum-manager-config');
 
-        $timestamp1 = date('Y_m_d_His');
-        $timestamp2 = date('Y_m_d_His', time() + 1);
-        $timestamp3 = date('Y_m_d_His', time() + 2);
-
-        $scopesMigrationPath = database_path("migrations/{$timestamp3}_create_sanctum_scopes_tables.php");
+        $columnsMigrationPath = $this->resolveMigrationPath('add_manager_columns_to_personal_access_tokens_table.php', 0);
+        $logsMigrationPath = $this->resolveMigrationPath('create_sanctum_token_logs_table.php', 1);
+        $scopesMigrationPath = $this->resolveMigrationPath('create_sanctum_scopes_tables.php', 2);
 
         $this->publishes([
-            __DIR__.'/../database/migrations/add_manager_columns_to_personal_access_tokens_table.php.stub' => database_path("migrations/{$timestamp1}_add_manager_columns_to_personal_access_tokens_table.php"),
-            __DIR__.'/../database/migrations/create_sanctum_token_logs_table.php.stub' => database_path("migrations/{$timestamp2}_create_sanctum_token_logs_table.php"),
+            __DIR__.'/../database/migrations/add_manager_columns_to_personal_access_tokens_table.php.stub' => $columnsMigrationPath,
+            __DIR__.'/../database/migrations/create_sanctum_token_logs_table.php.stub' => $logsMigrationPath,
             __DIR__.'/../database/migrations/create_sanctum_scopes_tables.php.stub' => $scopesMigrationPath,
         ], 'sanctum-manager-migrations');
 
@@ -138,6 +136,26 @@ class SanctumManagerServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__.'/../lang' => $this->app->langPath('vendor/sanctum-manager'),
         ], 'sanctum-manager-lang');
+    }
+
+    /**
+     * Resolve the target migration path without duplicating already-published migrations.
+     *
+     * If a migration with the same suffix already exists in the host application's
+     * database/migrations directory, its existing path is returned so Laravel skips it
+     * and only publishes newly added incremental migrations.
+     */
+    protected function resolveMigrationPath(string $migrationFilename, int $offsetSeconds): string
+    {
+        $existing = glob(database_path("migrations/*_{$migrationFilename}"));
+
+        if (is_array($existing) && $existing !== []) {
+            return $existing[0];
+        }
+
+        $timestamp = date('Y_m_d_His', time() + $offsetSeconds);
+
+        return database_path("migrations/{$timestamp}_{$migrationFilename}");
     }
 
     /**

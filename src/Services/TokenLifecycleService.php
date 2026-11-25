@@ -263,6 +263,33 @@ class TokenLifecycleService implements TokenManagerContract
     }
 
     /**
+     * Replace the scopes assigned to an existing active personal access token.
+     *
+     * @param  array<int, string>  $scopes
+     */
+    public function updateScopes(PersonalAccessToken $token, array $scopes): PersonalAccessToken
+    {
+        if ($token->isRevoked()) {
+            throw new TokenRevokedException('Cannot update scopes of a token that has already been revoked.');
+        }
+
+        if ($token->isExpired()) {
+            throw new TokenRevokedException('Cannot update scopes of a token that has already expired.');
+        }
+
+        if ($scopes === []) {
+            $defaults = $this->registry->defaultScopes();
+            $scopes = $defaults !== [] ? $defaults : ['*'];
+        }
+
+        $resolvedScopes = $this->registry->resolveAndExpand($scopes);
+
+        $token->setEffectiveScopes($resolvedScopes)->save();
+
+        return $token;
+    }
+
+    /**
      * Prune expired, revoked, and past-grace tokens as well as stale audit logs.
      *
      * @return array{tokens: int, logs: int}

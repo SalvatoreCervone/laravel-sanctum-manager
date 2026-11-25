@@ -264,6 +264,63 @@ class DashboardController
     }
 
     /**
+     * Update the scopes assigned to an existing active personal access token.
+     */
+    public function updateScopes(Request $request, int|string $tokenId): RedirectResponse
+    {
+        /** @var array<string, mixed> $validated */
+        $validated = $request->validate([
+            'scopes' => ['nullable', 'array'],
+            'scopes.*' => ['string'],
+            'custom_scopes' => ['nullable', 'string'],
+        ]);
+
+        /** @var PersonalAccessToken|null $token */
+        $token = PersonalAccessToken::query()->find($tokenId);
+
+        if ($token === null) {
+            return redirect()
+                ->back()
+                ->with('sanctum_manager_error', __('sanctum-manager::sanctum-manager.flash.token_not_found'));
+        }
+
+        $scopes = [];
+        if (isset($validated['scopes']) && is_array($validated['scopes'])) {
+            foreach ($validated['scopes'] as $scope) {
+                if (is_string($scope) && trim($scope) !== '') {
+                    $scopes[] = trim($scope);
+                }
+            }
+        }
+
+        if (isset($validated['custom_scopes']) && is_string($validated['custom_scopes'])) {
+            $scopes = array_merge($scopes, $this->parseDelimitedList($validated['custom_scopes']));
+        }
+
+        $scopes = array_values(array_unique($scopes));
+
+        if ($scopes === []) {
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with('sanctum_manager_error', __('sanctum-manager::sanctum-manager.flash.token_scopes_required'));
+        }
+
+        try {
+            $this->tokenManager->updateScopes($token, $scopes);
+        } catch (InvalidScopeException|TokenRevokedException $exception) {
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with('sanctum_manager_error', $exception->getMessage());
+        }
+
+        return redirect()
+            ->route('sanctum-manager.dashboard.index')
+            ->with('sanctum_manager_status', __('sanctum-manager::sanctum-manager.flash.token_scopes_updated', ['name' => $token->name]));
+    }
+
+    /**
      * Revoke a single personal access token.
      */
     public function revoke(Request $request, int|string $tokenId): RedirectResponse

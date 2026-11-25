@@ -195,6 +195,30 @@ class PersonalAccessToken extends SanctumPersonalAccessToken
     }
 
     /**
+     * Replace the token's effective scopes while preserving any embedded __meta: payload.
+     *
+     * @param  array<int, string>  $scopes
+     */
+    public function setEffectiveScopes(array $scopes): self
+    {
+        $cleanScopes = array_values(array_unique(array_filter(
+            $scopes,
+            static fn (string $item): bool => $item !== '' && ! str_starts_with($item, self::META_PREFIX),
+        )));
+
+        if (! static::usesExtendedColumns()) {
+            $meta = $this->extractEmbeddedMeta();
+            if ($meta !== []) {
+                $cleanScopes[] = self::META_PREFIX.json_encode($meta, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+            }
+        }
+
+        $this->abilities = $cleanScopes;
+
+        return $this;
+    }
+
+    /**
      * Read an extended attribute from the SQL column (extended mode) or from embedded __meta: payload.
      */
     public function getMetaAttribute(string $key, mixed $default = null): mixed

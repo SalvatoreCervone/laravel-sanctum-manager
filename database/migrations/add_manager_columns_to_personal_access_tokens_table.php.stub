@@ -10,40 +10,105 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('personal_access_tokens', function (Blueprint $table): void {
-            $table->timestamp('revoked_at')->nullable()->index();
-            $table->string('revocation_reason')->nullable();
-            $table->unsignedBigInteger('rotated_from_id')->nullable()->index();
-            $table->timestamp('grace_expires_at')->nullable();
-            $table->string('last_used_ip', 45)->nullable();
-            $table->string('last_used_user_agent')->nullable();
-            $table->unsignedBigInteger('uses_count')->default(0);
-            $table->unsignedBigInteger('max_uses')->nullable();
-            $table->json('allowed_ips')->nullable();
-            $table->json('allowed_origins')->nullable();
-            $table->json('metadata')->nullable();
+        if (! Schema::hasTable('personal_access_tokens')) {
+            return;
+        }
+
+        $columns = [
+            'revoked_at',
+            'revocation_reason',
+            'rotated_from_id',
+            'grace_expires_at',
+            'last_used_ip',
+            'last_used_user_agent',
+            'uses_count',
+            'max_uses',
+            'allowed_ips',
+            'allowed_origins',
+            'metadata',
+        ];
+
+        $missing = [];
+        foreach ($columns as $column) {
+            if (! Schema::hasColumn('personal_access_tokens', $column)) {
+                $missing[$column] = true;
+            }
+        }
+
+        if ($missing === []) {
+            return;
+        }
+
+        Schema::table('personal_access_tokens', function (Blueprint $table) use ($missing): void {
+            if (isset($missing['revoked_at'])) {
+                $table->timestamp('revoked_at')->nullable()->index();
+            }
+            if (isset($missing['revocation_reason'])) {
+                $table->string('revocation_reason')->nullable();
+            }
+            if (isset($missing['rotated_from_id'])) {
+                $table->unsignedBigInteger('rotated_from_id')->nullable()->index();
+            }
+            if (isset($missing['grace_expires_at'])) {
+                $table->timestamp('grace_expires_at')->nullable();
+            }
+            if (isset($missing['last_used_ip'])) {
+                $table->string('last_used_ip', 45)->nullable();
+            }
+            if (isset($missing['last_used_user_agent'])) {
+                $table->string('last_used_user_agent')->nullable();
+            }
+            if (isset($missing['uses_count'])) {
+                $table->unsignedBigInteger('uses_count')->default(0);
+            }
+            if (isset($missing['max_uses'])) {
+                $table->unsignedBigInteger('max_uses')->nullable();
+            }
+            if (isset($missing['allowed_ips'])) {
+                $table->json('allowed_ips')->nullable();
+            }
+            if (isset($missing['allowed_origins'])) {
+                $table->json('allowed_origins')->nullable();
+            }
+            if (isset($missing['metadata'])) {
+                $table->json('metadata')->nullable();
+            }
         });
     }
 
     public function down(): void
     {
-        Schema::table('personal_access_tokens', function (Blueprint $table): void {
-            $table->dropIndex(['revoked_at']);
-            $table->dropIndex(['rotated_from_id']);
+        if (! Schema::hasTable('personal_access_tokens')) {
+            return;
+        }
 
-            $table->dropColumn([
-                'revoked_at',
-                'revocation_reason',
-                'rotated_from_id',
-                'grace_expires_at',
-                'last_used_ip',
-                'last_used_user_agent',
-                'uses_count',
-                'max_uses',
-                'allowed_ips',
-                'allowed_origins',
-                'metadata',
-            ]);
+        $columnsToDrop = array_values(array_filter([
+            'revoked_at',
+            'revocation_reason',
+            'rotated_from_id',
+            'grace_expires_at',
+            'last_used_ip',
+            'last_used_user_agent',
+            'uses_count',
+            'max_uses',
+            'allowed_ips',
+            'allowed_origins',
+            'metadata',
+        ], static fn (string $column): bool => Schema::hasColumn('personal_access_tokens', $column)));
+
+        if ($columnsToDrop === []) {
+            return;
+        }
+
+        Schema::table('personal_access_tokens', function (Blueprint $table) use ($columnsToDrop): void {
+            if (in_array('revoked_at', $columnsToDrop, true)) {
+                $table->dropIndex(['revoked_at']);
+            }
+            if (in_array('rotated_from_id', $columnsToDrop, true)) {
+                $table->dropIndex(['rotated_from_id']);
+            }
+
+            $table->dropColumn($columnsToDrop);
         });
     }
 };

@@ -257,6 +257,16 @@
                                 <div style="display:inline-flex;gap:6px;align-items:center;">
                                     <button type="button"
                                             class="sm-btn sm-btn-sm"
+                                            data-dialog-open="sm-edit-scopes-dialog"
+                                            data-form-action="{{ route('sanctum-manager.dashboard.tokens.update-scopes', ['tokenId' => $token->getKey()]) }}"
+                                            data-token-name="{{ $token->name }}"
+                                            data-token-id="{{ $token->getKey() }}"
+                                            data-token-scopes='@json($effectiveScopes)'
+                                            @if(! $canRotate) disabled @endif>
+                                        {{ __('sanctum-manager::sanctum-manager.tokens.edit_scopes') }}
+                                    </button>
+                                    <button type="button"
+                                            class="sm-btn sm-btn-sm"
                                             data-dialog-open="sm-rotate-dialog"
                                             data-form-action="{{ route('sanctum-manager.dashboard.tokens.rotate', ['tokenId' => $token->getKey()]) }}"
                                             data-token-name="{{ $token->name }}"
@@ -621,4 +631,105 @@
         </div>
     </form>
 </dialog>
+
+{{-- 6. Edit Token Scopes Dialog --}}
+<dialog id="sm-edit-scopes-dialog" class="sm-dialog" aria-labelledby="sm-edit-scopes-dialog-title">
+    <form method="POST" action="#" class="sm-dialog-form" id="sm-edit-scopes-form">
+        @csrf
+        @method('PATCH')
+        <div class="sm-dialog-header">
+            <h2 class="sm-dialog-title" id="sm-edit-scopes-dialog-title">
+                {{ __('sanctum-manager::sanctum-manager.tokens.modal_edit_scopes_title') }}:
+                <span data-token-name-target class="mono"></span>
+            </h2>
+            <button type="button" class="sm-icon-btn" data-dialog-close aria-label="{{ __('sanctum-manager::sanctum-manager.common.close') }}">&times;</button>
+        </div>
+
+        <div class="sm-dialog-body">
+            @if (count($groups) > 0 || count($scopes) > 0)
+                <div class="sm-field">
+                    <span class="sm-label">{{ __('sanctum-manager::sanctum-manager.tokens.field_scopes') }}</span>
+                    <div class="sm-check-grid" id="sm-edit-scopes-grid">
+                        @foreach ($groups as $group)
+                            <label class="sm-check-item">
+                                <input type="checkbox" name="scopes[]" value="{{ '@' . $group->name }}">
+                                <span>
+                                    <span class="sm-check-title mono">{{ '@' . $group->name }}</span>
+                                    @if ($group->description !== '')
+                                        <span class="sm-check-desc">{{ $group->description }}</span>
+                                    @endif
+                                </span>
+                            </label>
+                        @endforeach
+                        @foreach ($scopes as $scope)
+                            <label class="sm-check-item">
+                                <input type="checkbox" name="scopes[]" value="{{ $scope->name }}">
+                                <span>
+                                    <span class="sm-check-title mono">{{ $scope->name }}</span>
+                                    @if ($scope->description !== '')
+                                        <span class="sm-check-desc">{{ $scope->description }}</span>
+                                    @endif
+                                </span>
+                            </label>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
+            <div class="sm-field" style="margin-bottom:0;">
+                <label for="sm-edit-custom-scopes" class="sm-label">{{ __('sanctum-manager::sanctum-manager.tokens.field_custom_scopes') }}</label>
+                <input type="text"
+                       id="sm-edit-custom-scopes"
+                       name="custom_scopes"
+                       class="sm-input mono"
+                       placeholder="orders:read, billing:write">
+            </div>
+        </div>
+
+        <div class="sm-dialog-footer">
+            <button type="button" class="sm-btn" data-dialog-close>{{ __('sanctum-manager::sanctum-manager.common.cancel') }}</button>
+            <button type="submit" class="sm-btn sm-btn-primary">{{ __('sanctum-manager::sanctum-manager.tokens.submit_update_scopes') }}</button>
+        </div>
+    </form>
+</dialog>
 @endsection
+
+@push('scripts')
+<script>
+    (function () {
+        document.addEventListener('click', function (event) {
+            var trigger = event.target.closest('[data-dialog-open="sm-edit-scopes-dialog"]');
+            if (!trigger) {
+                return;
+            }
+
+            var scopes = [];
+            try {
+                scopes = JSON.parse(trigger.getAttribute('data-token-scopes') || '[]');
+            } catch (e) {
+                scopes = [];
+            }
+
+            var form = document.getElementById('sm-edit-scopes-form');
+            if (!form) {
+                return;
+            }
+
+            var knownValues = new Set();
+            form.querySelectorAll('input[type="checkbox"][name="scopes[]"]').forEach(function (checkbox) {
+                knownValues.add(checkbox.value);
+                checkbox.checked = scopes.indexOf(checkbox.value) !== -1;
+            });
+
+            var customScopes = scopes.filter(function (scope) {
+                return !knownValues.has(scope);
+            });
+
+            var customInput = document.getElementById('sm-edit-custom-scopes');
+            if (customInput) {
+                customInput.value = customScopes.join(', ');
+            }
+        });
+    })();
+</script>
+@endpush

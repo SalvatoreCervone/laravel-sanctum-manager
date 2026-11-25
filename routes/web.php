@@ -14,6 +14,9 @@ Route::post('/tokens', [DashboardController::class, 'issue'])
 Route::post('/tokens/{tokenId}/rotate', [DashboardController::class, 'rotate'])
     ->name('sanctum-manager.dashboard.tokens.rotate');
 
+Route::patch('/tokens/{tokenId}/scopes', [DashboardController::class, 'updateScopes'])
+    ->name('sanctum-manager.dashboard.tokens.update-scopes');
+
 Route::delete('/tokens/{tokenId}', [DashboardController::class, 'revoke'])
     ->name('sanctum-manager.dashboard.tokens.revoke');
 

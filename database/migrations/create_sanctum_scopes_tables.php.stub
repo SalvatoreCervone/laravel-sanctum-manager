@@ -13,24 +13,28 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('sanctum_scopes', function (Blueprint $table): void {
-            $table->id();
-            $table->string('name')->unique();
-            $table->string('description')->nullable();
-            $table->string('group')->nullable()->index();
-            $table->json('implies')->nullable();
-            $table->boolean('is_default')->default(false);
-            $table->boolean('is_deprecated')->default(false);
-            $table->timestamps();
-        });
+        if (! Schema::hasTable('sanctum_scopes')) {
+            Schema::create('sanctum_scopes', function (Blueprint $table): void {
+                $table->id();
+                $table->string('name')->unique();
+                $table->string('description')->nullable();
+                $table->string('group')->nullable()->index();
+                $table->json('implies')->nullable();
+                $table->boolean('is_default')->default(false);
+                $table->boolean('is_deprecated')->default(false);
+                $table->timestamps();
+            });
+        }
 
-        Schema::create('sanctum_scope_groups', function (Blueprint $table): void {
-            $table->id();
-            $table->string('name')->unique();
-            $table->string('description')->nullable();
-            $table->json('scopes');
-            $table->timestamps();
-        });
+        if (! Schema::hasTable('sanctum_scope_groups')) {
+            Schema::create('sanctum_scope_groups', function (Blueprint $table): void {
+                $table->id();
+                $table->string('name')->unique();
+                $table->string('description')->nullable();
+                $table->json('scopes');
+                $table->timestamps();
+            });
+        }
     }
 
     /**

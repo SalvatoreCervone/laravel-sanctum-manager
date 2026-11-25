@@ -10,6 +10,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('sanctum_token_logs')) {
+            return;
+        }
+
         Schema::create('sanctum_token_logs', function (Blueprint $table): void {
             $table->id();
             $table->unsignedBigInteger('personal_access_token_id')->index();
