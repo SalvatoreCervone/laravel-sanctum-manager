@@ -1,0 +1,60 @@
+{
+    "name": "salvatore/laravel-sanctum-manager",
+    "description": "Advanced Scope/Ability registry, hierarchical wildcards, token lifecycle management (rotation with grace period, IP/origin restrictions, max uses, debounced audit) for Laravel Sanctum — Zero-Migration first with optional extended migrations.",
+    "keywords": [
+        "laravel",
+        "sanctum",
+        "tokens",
+        "scopes",
+        "abilities",
+        "api",
+        "authentication",
+        "security"
+    ],
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2",
+        "illuminate/console": "^11.0|^12.0",
+        "illuminate/database": "^11.0|^12.0",
+        "illuminate/http": "^11.0|^12.0",
+        "illuminate/support": "^11.0|^12.0",
+        "laravel/sanctum": "^4.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^2.9|^3.0",
+        "laravel/pint": "^1.18",
+        "orchestra/testbench": "^9.0|^10.0",
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "SanctumManager\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SanctumManager\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "SanctumManager\\SanctumManagerServiceProvider"
+            ],
+            "aliases": {
+                "SanctumManager": "SanctumManager\\Facades\\SanctumManager"
+            }
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit",
+        "analyse": "vendor/bin/phpstan analyse",
+        "format": "vendor/bin/pint"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
