@@ -118,25 +118,127 @@ class User extends Authenticatable
 
 ## Configurazione
 
-Il file `config/sanctum-manager.php` permette di configurare ogni aspetto del pacchetto:
+Tutte le impostazioni del pacchetto risiedono in `config/sanctum-manager.php` (pubblicabile con `php artisan sanctum-manager:install` o `php artisan vendor:publish --tag=sanctum-manager-config`).
 
-| Sezione | Opzioni principali | Default |
-| --- | --- | --- |
-| `storage_mode` | `zero_migration`, `extended_columns`, `auto` | `zero_migration` |
-| `scopes` | `strict_validation`, `storage_driver` (`auto` \| `database` \| `file`), `storage_path`, `definitions`, `groups` | `strict_validation: false` / `auto` |
-| `tokens` | `default_expiration_minutes`, `max_tokens_per_user`, `quota_exceeded_strategy`, `token_prefix` | `null` / `throw_exception` |
-| `rotation` | `grace_period_minutes` | `30` |
-| `security` | `keep_revoked_tokens`, `enforce_ip_restrictions`, `enforce_origin_restrictions` | `false` / `true` / `true` |
-| `rate_limiting` | `default_per_minute` | `60` |
-| `audit` | `update_interval_seconds`, `log_requests`, `driver` (`log` \| `database`) | `300` / `false` / `log` |
-| `cache` | `enabled`, `ttl_seconds`, `prefix` | `false` / `60` |
-| `routes` | `enabled`, `prefix`, `middleware` | `false` / `api/sanctum-manager` |
-| `dashboard` | `enabled`, `prefix`, `domain`, `middleware`, `gate`, `allowed_emails`, `allow_in_local`, `per_page` | `true` / `sanctum-manager` / `viewSanctumManager` |
-| `mail` | `enabled`, `events` (`issued`, `revoked`, `rotated`), `notify_token_owner`, `recipients`, `from`, `subject_prefix`, `queue` | `false` / tutti gli eventi attivi |
+### Legenda: dove si configurano le opzioni
 
-Variabili d'ambiente supportate di default:
+| Modalità | Significato |
+| --- | --- |
+| **`.env` / `config`** | Ha una variabile d'ambiente dedicata in `.env` (e può essere personalizzata anche in `config/sanctum-manager.php`). |
+| **Solo `config`** | Nessuna variabile `.env` predefinita: si modifica in `config/sanctum-manager.php` (dopo il publish). |
+| **Pannello Web + `config`/codice** | Gestibile direttamente dalla Dashboard (CRUD persistito su DB o file JSON), oltre che da `config/sanctum-manager.php` o codice. |
+| **Override da Pannello** | Il default globale si imposta in `.env`/`config`, ma può essere sovrascritto per singolo token o azione dalla Dashboard (e via CLI/API). |
+
+> **Nota sulla Dashboard Web:** le impostazioni globali di sistema (Storage Mode, Audit Log, Access Gate, Notifiche Email) sono **mostrate in sola lettura** nel pannello per trasparenza e sicurezza: vanno modificate tramite `.env` o `config/sanctum-manager.php`. Dal pannello puoi invece gestire direttamente il catalogo **Scope & Gruppi**, **emettere/ruotare/revocare token** (con override di scadenza, IP, Origin, `max_uses`, prefisso, rate limit e grace period), **modificare gli scope** di un token, eseguire il **pruning** e inviare un'**email di test**.
+
+---
+
+### 1. Modalità di Storage (`storage_mode`)
+
+| Chiave | Variabile `.env` | Default | Dove si configura | A cosa serve |
+| --- | --- | --- | --- | --- |
+| `storage_mode` | `SANCTUM_MANAGER_STORAGE_MODE` | `'zero_migration'` | **`.env` / `config`** *(sola lettura nel pannello)* | Definisce dove salvare i metadati estesi dei token (IP/Origin consentiti, `max_uses`, stato revoca, grace period, metadata custom):<br>• `zero_migration`: usa solo la tabella nativa `personal_access_tokens` (metadati nel JSON `abilities` + contatori in Cache).<br>• `extended_columns`: usa le colonne SQL dedicate aggiunte dalle migrazioni opzionali.<br>• `auto`: rileva automaticamente se le colonne estese esistono nel DB. |
+
+### 2. Scope & Gruppi (`scopes`)
+
+| Chiave | Variabile `.env` | Default | Dove si configura | A cosa serve |
+| --- | --- | --- | --- | --- |
+| `scopes.strict_validation` | — | `false` | **Solo `config`** *(sola lettura nel pannello)* | Se `true`, impedisce di emettere o aggiornare un token con scope non registrati lanciando `InvalidScopeException`. |
+| `scopes.storage_driver` | `SANCTUM_MANAGER_SCOPES_DRIVER` | `'auto'` | **`.env` / `config`** *(sola lettura nel pannello)* | Driver di persistenza per gli scope e i gruppi creati/modificati dalla Dashboard:<br>• `auto`: usa le tabelle DB `sanctum_scopes` / `sanctum_scope_groups` se migrate, altrimenti il file JSON.<br>• `database`: salva sempre su DB.<br>• `file`: salva sempre su file JSON. |
+| `scopes.storage_path` | `SANCTUM_MANAGER_SCOPES_PATH` | `null` | **`.env` / `config`** | Percorso assoluto del file JSON usato quando il driver attivo è `file`. Se `null`, usa `storage/app/sanctum-manager/scopes.json`. |
+| `scopes.definitions` | — | `[]` | **Pannello Web + `config`/codice** | Catalogo degli scope applicativi (`description`, `group`, `implies`, `is_default`, `is_deprecated`). Gestibile anche dalla sezione *Scopes* della Dashboard o via `SanctumManager::defineScope()`. |
+| `scopes.groups` | — | `[]` | **Pannello Web + `config`/codice** | Gruppi/preset di scope (es. `@readonly` → `['orders:read', 'users:read']`). Gestibili dalla sezione *Scopes* della Dashboard o via `SanctumManager::defineGroup()`. |
+
+### 3. Emissione Token & Quote (`tokens`)
+
+| Chiave | Variabile `.env` | Default | Dove si configura | A cosa serve |
+| --- | --- | --- | --- | --- |
+| `tokens.default_expiration_minutes` | — | `null` | **Solo `config`** *(override per singolo token dal pannello)* | Durata predefinita (in minuti) applicata ai nuovi token se non viene indicata una scadenza esplicita (`null` = nessuna scadenza). |
+| `tokens.max_tokens_per_user` | — | `null` | **Solo `config`** | Numero massimo di token attivi contemporaneamente per singolo utente (`null` = illimitato). |
+| `tokens.quota_exceeded_strategy` | — | `'throw_exception'` | **Solo `config`** | Comportamento al superamento di `max_tokens_per_user`: `throw_exception` blocca l'emissione con `TokenQuotaExceededException`, `revoke_oldest` revoca automaticamente il token più vecchio dell'utente. |
+| `tokens.token_prefix` | `SANCTUM_TOKEN_PREFIX` | `''` | **`.env` / `config`** *(override per singolo token dal pannello)* | Prefisso aggiunto ai token in chiaro generati (es. `sm_live_`), utile per compatibilità con strumenti di secret scanning (GitHub, GitGuardian, ecc.). |
+| `tokens.hash_prefix` | — | `null` | **Solo `config`** | Campo riservato per eventuali configurazioni avanzate di prefisso hash (`null` di default). |
+
+### 4. Rotazione Token (`rotation`)
+
+| Chiave | Variabile `.env` | Default | Dove si configura | A cosa serve |
+| --- | --- | --- | --- | --- |
+| `rotation.grace_period_minutes` | — | `30` | **Solo `config`** *(override per singola rotazione dal pannello)* | Periodo di grazia predefinito (in minuti) durante il quale il vecchio token resta valido insieme al nuovo dopo una rotazione, evitando errori sulle richieste in volo. |
+
+### 5. Sicurezza & Vincoli (`security`)
+
+| Chiave | Variabile `.env` | Default | Dove si configura | A cosa serve |
+| --- | --- | --- | --- | --- |
+| `security.keep_revoked_tokens` | — | `false` | **Solo `config`** | Se `false`, la revoca elimina subito il record del token dal DB. Se `true`, esegue una soft-revocation mantenendo il record per audit/storico fino al pruning. |
+| `security.enforce_ip_restrictions` | — | `true` | **Solo `config`** *(gli IP consentiti per singolo token si impostano dal pannello in emissione)* | Attiva/disattiva globalmente la verifica degli IP/CIDR consentiti nel middleware `sanctum.constraints`. |
+| `security.enforce_origin_restrictions` | — | `true` | **Solo `config`** *(gli Origin consentiti per singolo token si impostano dal pannello in emissione)* | Attiva/disattiva globalmente la verifica degli header `Origin`/`Referer` nel middleware `sanctum.constraints`. |
+
+### 6. Rate Limiting (`rate_limiting`)
+
+| Chiave | Variabile `.env` | Default | Dove si configura | A cosa serve |
+| --- | --- | --- | --- | --- |
+| `rate_limiting.default_per_minute` | — | `60` | **Solo `config`** *(override per singolo token dal pannello in emissione)* | Limite predefinito di richieste al minuto per il rate limiter `throttle:sanctum-token`. Sovrascrivibile sul singolo token via `metadata['rate_limit_per_minute']` o campo *Rate limit* nella Dashboard. |
+
+### 7. Tracciamento Uso & Audit Log (`audit`)
+
+| Chiave | Variabile `.env` | Default | Dove si configura | A cosa serve |
+| --- | --- | --- | --- | --- |
+| `audit.update_interval_seconds` | — | `300` | **Solo `config`** *(sola lettura nel pannello)* | Intervallo di debounce (in secondi, via Cache) per aggiornare `last_used_at` sul DB, evitando row-lock ad alto traffico. |
+| `audit.log_requests` | — | `false` | **Solo `config`** *(sola lettura nel pannello)* | Se `true`, registra ogni richiesta autenticata con token (endpoint, metodo, IP, user-agent, stato). |
+| `audit.driver` | — | `'log'` | **Solo `config`** *(sola lettura nel pannello)* | Dove scrivere i log quando `log_requests` è attivo: `log` (canale di log standard Laravel) oppure `database` (tabella `sanctum_token_logs`, visibile nella sezione *Audit Log* della Dashboard; richiede le migrazioni opzionali). |
+
+### 8. Cache Lookup Token (`cache`)
+
+| Chiave | Variabile `.env` | Default | Dove si configura | A cosa serve |
+| --- | --- | --- | --- | --- |
+| `cache.enabled` | — | `false` | **Solo `config`** | Memorizza in Cache le istanze `PersonalAccessToken` risolte da `findToken()` per ridurre le query al DB (invalidata automaticamente su revoca, rotazione e modifica scope). |
+| `cache.ttl_seconds` | — | `60` | **Solo `config`** | Durata in secondi (TTL) dei token salvati in Cache. |
+| `cache.prefix` | — | `'sanctum_mgr:token:'` | **Solo `config`** | Prefisso delle chiavi di Cache generate dal pacchetto. |
+
+### 9. Endpoint API Headless (`routes`)
+
+| Chiave | Variabile `.env` | Default | Dove si configura | A cosa serve |
+| --- | --- | --- | --- | --- |
+| `routes.enabled` | — | `false` | **Solo `config`** | Abilita gli endpoint REST JSON built-in per elencare scope e gestire i token dell'utente autenticato. |
+| `routes.prefix` | — | `'api/sanctum-manager'` | **Solo `config`** | Prefisso URL delle rotte API headless. |
+| `routes.middleware` | — | `['api', 'auth:sanctum']` | **Solo `config`** | Middleware applicati agli endpoint API headless. |
+
+### 10. Dashboard Web & Controllo Accessi (`dashboard`)
+
+| Chiave | Variabile `.env` | Default | Dove si configura | A cosa serve |
+| --- | --- | --- | --- | --- |
+| `dashboard.enabled` | `SANCTUM_MANAGER_DASHBOARD_ENABLED` | `true` | **`.env` / `config`** | Abilita o disabilita completamente l'interfaccia grafica web. |
+| `dashboard.prefix` | `SANCTUM_MANAGER_DASHBOARD_PREFIX` | `'sanctum-manager'` | **`.env` / `config`** | Percorso URL su cui è montata la Dashboard (es. `/sanctum-manager`). |
+| `dashboard.domain` | `SANCTUM_MANAGER_DASHBOARD_DOMAIN` | `null` | **`.env` / `config`** | Dominio o sottodominio dedicato opzionale per la Dashboard (es. `admin.example.com`). |
+| `dashboard.middleware` | — | `['web', 'sanctum.dashboard']` | **Solo `config`** *(sola lettura nel pannello)* | Middleware applicati alla Dashboard (`sanctum.dashboard` controlla il Laravel Gate). |
+| `dashboard.gate` | `SANCTUM_MANAGER_DASHBOARD_GATE` | `'viewSanctumManager'` | **`.env` / `config`** *(sola lettura nel pannello)* | Nome del Laravel Gate utilizzato per autorizzare l'accesso alla Dashboard. |
+| `dashboard.allowed_emails` | `SANCTUM_MANAGER_ALLOWED_EMAILS` | `[]` | **`.env` / `config`** *(sola lettura nel pannello)* | Elenco di email autorizzate ad accedere al pannello (in `.env` separate da virgole, es. `admin@example.com,ops@example.com`). |
+| `dashboard.allow_in_local` | `SANCTUM_MANAGER_ALLOW_IN_LOCAL` | `true` | **`.env` / `config`** *(sola lettura nel pannello)* | Se `true`, consente l'accesso automatico alla Dashboard quando `APP_ENV=local`. |
+| `dashboard.per_page` | — | `20` | **Solo `config`** | Numero di token mostrati per pagina nella tabella principale della Dashboard. |
+
+### 11. Notifiche Email (`mail`)
+
+| Chiave | Variabile `.env` | Default | Dove si configura | A cosa serve |
+| --- | --- | --- | --- | --- |
+| `mail.enabled` | `SANCTUM_MANAGER_MAIL_ENABLED` | `false` | **`.env` / `config`** *(sola lettura nel pannello; test invio disponibile)* | Abilita l'invio automatico delle email di notifica sul ciclo di vita dei token (il secret in chiaro non viene mai incluso). |
+| `mail.events.issued` | — | `true` | **Solo `config`** *(sola lettura nel pannello)* | Invia un'email quando viene emesso un nuovo token. |
+| `mail.events.revoked` | — | `true` | **Solo `config`** *(sola lettura nel pannello)* | Invia un'email quando un token viene revocato. |
+| `mail.events.rotated` | — | `true` | **Solo `config`** *(sola lettura nel pannello)* | Invia un'email quando un token viene ruotato. |
+| `mail.notify_token_owner` | — | `true` | **Solo `config`** *(sola lettura nel pannello)* | Se `true`, invia la notifica anche all'email del proprietario del token. |
+| `mail.recipients` | `SANCTUM_MANAGER_MAIL_RECIPIENTS` | `[]` | **`.env` / `config`** *(sola lettura nel pannello)* | Destinatari amministrativi/security aggiuntivi (in `.env` separati da virgole). |
+| `mail.from.address` | `SANCTUM_MANAGER_MAIL_FROM_ADDRESS` | `null` | **`.env` / `config`** | Indirizzo email mittente dedicato (`null` = usa `MAIL_FROM_ADDRESS` globale di Laravel). |
+| `mail.from.name` | `SANCTUM_MANAGER_MAIL_FROM_NAME` | `null` | **`.env` / `config`** | Nome mittente dedicato (`null` = usa `MAIL_FROM_NAME` globale di Laravel). |
+| `mail.subject_prefix` | `SANCTUM_MANAGER_MAIL_SUBJECT_PREFIX` | `'[Sanctum Manager]'` | **`.env` / `config`** | Prefisso anteposto all'oggetto di tutte le email inviate dal pacchetto. |
+| `mail.queue` | `SANCTUM_MANAGER_MAIL_QUEUE` | `false` | **`.env` / `config`** *(sola lettura nel pannello)* | Se `true`, accoda l'invio delle email tramite Laravel Queue invece di inviarle in modo sincrono. |
+| `mail.queue_connection` | `SANCTUM_MANAGER_MAIL_QUEUE_CONNECTION` | `null` | **`.env` / `config`** | Connessione di coda specifica da usare quando `mail.queue` è `true` (`null` = default Laravel). |
+| `mail.queue_name` | `SANCTUM_MANAGER_MAIL_QUEUE_NAME` | `null` | **`.env` / `config`** | Nome della coda su cui instradare le email quando `mail.queue` è `true` (`null` = coda predefinita). |
+
+---
+
+### Elenco completo variabili `.env` supportate
 
 ```env
+# Storage & Prefisso Token
 SANCTUM_MANAGER_STORAGE_MODE=zero_migration
 SANCTUM_TOKEN_PREFIX=
 
@@ -147,15 +249,20 @@ SANCTUM_MANAGER_SCOPES_PATH=
 # Dashboard & Access Gate
 SANCTUM_MANAGER_DASHBOARD_ENABLED=true
 SANCTUM_MANAGER_DASHBOARD_PREFIX=sanctum-manager
+SANCTUM_MANAGER_DASHBOARD_DOMAIN=
 SANCTUM_MANAGER_DASHBOARD_GATE=viewSanctumManager
 SANCTUM_MANAGER_ALLOWED_EMAILS=admin@example.com,ops@example.com
 SANCTUM_MANAGER_ALLOW_IN_LOCAL=true
 
 # Notifiche Email
-SANCTUM_MANAGER_MAIL_ENABLED=true
+SANCTUM_MANAGER_MAIL_ENABLED=false
 SANCTUM_MANAGER_MAIL_RECIPIENTS=security@example.com
+SANCTUM_MANAGER_MAIL_FROM_ADDRESS=
+SANCTUM_MANAGER_MAIL_FROM_NAME=
 SANCTUM_MANAGER_MAIL_SUBJECT_PREFIX="[Sanctum Manager]"
 SANCTUM_MANAGER_MAIL_QUEUE=false
+SANCTUM_MANAGER_MAIL_QUEUE_CONNECTION=
+SANCTUM_MANAGER_MAIL_QUEUE_NAME=
 ```
 
 ---
